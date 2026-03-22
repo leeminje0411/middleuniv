@@ -23,10 +23,6 @@ body {
   transition: background 0.25s ease;
 }
 
-body.logging-in {
-  background: #000000;
-}
-
 body.logging-in .login-card {
   background: transparent;
   border-color: transparent;
@@ -122,13 +118,36 @@ body.logging-in .hack-overlay {
   transition: transform 0.35s ease, filter 0.35s ease;
 }
 
-.cau-logo.logging-in {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(3);
-  z-index: 10000;
-  filter: drop-shadow(0 0 28px rgba(255, 255, 255, 0.35));
+body.logging-in .logo-wrap {
+  margin-bottom: 14px;
+}
+
+@keyframes cauLogoBounce {
+  0% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.22));
+  }
+  18% {
+    transform: translateY(-8px) scale(1.02);
+    filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.28));
+  }
+  36% {
+    transform: translateY(0) scale(0.995);
+  }
+  58% {
+    transform: translateY(-11px) scale(1.03);
+  }
+  78% {
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+body.logging-in .cau-logo {
+  animation: cauLogoBounce 1.4s cubic-bezier(0.2, 0.9, 0.2, 1) infinite;
+  filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.28));
 }
 
 body.logging-in .form-area {

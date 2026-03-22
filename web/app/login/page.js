@@ -134,7 +134,7 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-card">
         <div className="logo-wrap">
-          <img className={"cau-logo" + (isRunning ? " logging-in" : "")} src={isRunning ? "/images/cau-logo.png" : "/images/cau-logo-kind.png"} alt="중앙대학교 로고" />
+          <img className="cau-logo" src={isRunning ? "/images/cau-logo.png" : "/images/cau-logo-kind.png"} alt="중앙대학교 로고" />
         </div>
 
         {isRunning ? (

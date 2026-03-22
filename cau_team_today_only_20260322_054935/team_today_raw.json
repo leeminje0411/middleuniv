@@ -1,5 +1,5 @@
 {
-  "scrapedAt": "2026-03-22T05:40:58.619Z",
+  "scrapedAt": "2026-03-22T05:49:40.594Z",
   "sourceUrl": "https://library.cau.ac.kr/library-services/room/team-rooms?tabIndex=2",
   "selectedDateValue": "2026-03-22",
   "selectedDateLabel": "3월 22일",
@@ -615,20 +615,7 @@
         "desc": "팀플룸1",
         "attention": "-",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [
-          {
-            "value": "1",
-            "label": "학습"
-          },
-          {
-            "value": "2",
-            "label": "회의"
-          },
-          {
-            "value": "3",
-            "label": "수업"
-          }
-        ],
+        "useSectionOptions": [],
         "slots": [
           {
             "status": "이용불가",
@@ -1897,20 +1884,7 @@
         "desc": "팀플룸2",
         "attention": "-",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [
-          {
-            "value": "1",
-            "label": "학습"
-          },
-          {
-            "value": "2",
-            "label": "회의"
-          },
-          {
-            "value": "3",
-            "label": "수업"
-          }
-        ],
+        "useSectionOptions": [],
         "slots": [
           {
             "status": "이용불가",
@@ -3176,20 +3150,7 @@
         "desc": "팀플룸3",
         "attention": "-",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [
-          {
-            "value": "1",
-            "label": "학습"
-          },
-          {
-            "value": "2",
-            "label": "회의"
-          },
-          {
-            "value": "3",
-            "label": "수업"
-          }
-        ],
+        "useSectionOptions": [],
         "slots": [
           {
             "status": "이용불가",
@@ -4453,20 +4414,7 @@
         "desc": "팀플룸4",
         "attention": "-",
         "companionHint": "수용인원 5 ~ 9명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [
-          {
-            "value": "1",
-            "label": "학습"
-          },
-          {
-            "value": "2",
-            "label": "회의"
-          },
-          {
-            "value": "3",
-            "label": "수업"
-          }
-        ],
+        "useSectionOptions": [],
         "slots": [
           {
             "status": "이용불가",

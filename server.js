@@ -632,36 +632,97 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
 
     const chipList = page.locator("mat-chip-list .mat-chip");
     let chipCount = await chipList.count().catch(() => 0);
+    pushBookingLog(`companion dialog visible initialChipCount=${chipCount}`);
 
     for (let i = 0; i < companions.length; i++) {
       const c = companions[i];
       console.log(`[api/book] companion add ${i + 1} / ${companions.length} ${JSON.stringify(c)}`);
+      pushBookingLog(`companion fill start i=${i} name=${String(c.name || "")} studentId=${String(c.studentId || "")}`);
 
       const nameInput = dialog.locator('input[formcontrolname="name"]');
       const idInput = dialog.locator('input[formcontrolname="memberNo"]');
       await nameInput.waitFor({ state: "visible", timeout: 15000 });
       await idInput.waitFor({ state: "visible", timeout: 15000 });
 
+      await nameInput.fill("").catch(() => {});
+      await idInput.fill("").catch(() => {});
+      await sleep(50);
+
       await nameInput.fill(String(c.name || "").trim());
       await idInput.fill(String(c.studentId || "").trim());
 
-      const addBtn = dialog.locator('button:has-text("추가")').first();
-      await page.waitForFunction(
-        (el) => el && !el.disabled,
-        { timeout: 15000 },
-        await addBtn.elementHandle()
-      );
-      await addBtn.click();
+      // Angular form controls sometimes need explicit events/blur to enable buttons.
+      await nameInput.dispatchEvent("input").catch(() => {});
+      await idInput.dispatchEvent("input").catch(() => {});
+      await nameInput.dispatchEvent("change").catch(() => {});
+      await idInput.dispatchEvent("change").catch(() => {});
+      await idInput.press("Tab").catch(() => {});
+      await sleep(80);
+      pushBookingLog(`companion filled i=${i}`);
 
-      chipCount += 1;
-      await page.waitForFunction(
-        ({ wanted }) => {
-          const chips = document.querySelectorAll("mat-chip-list .mat-chip");
-          return chips && chips.length >= wanted;
-        },
-        { timeout: 15000 },
-        { wanted: chipCount }
-      );
+      const addBtn = dialog.locator('button:has-text("추가")').first();
+
+      pushBookingLog(`companion wait addBtn enabled i=${i}`);
+      const enableStartedAt = Date.now();
+      const enableDeadline = enableStartedAt + 15000;
+      let lastEnableLogAt = 0;
+      while (Date.now() < enableDeadline) {
+        const enabled = await addBtn.isEnabled().catch(() => false);
+        if (enabled) break;
+        const now = Date.now();
+        if (!lastEnableLogAt || now - lastEnableLogAt >= 1200) {
+          lastEnableLogAt = now;
+          const values = await dialog
+            .evaluate((el) => {
+              const nameEl = el.querySelector('input[formcontrolname="name"]');
+              const idEl = el.querySelector('input[formcontrolname="memberNo"]');
+              return {
+                name: nameEl ? String(nameEl.value || "") : null,
+                memberNo: idEl ? String(idEl.value || "") : null
+              };
+            })
+            .catch(() => ({}));
+          pushBookingLog(
+            `companion addBtn still disabled i=${i} elapsedMs=${now - enableStartedAt} values=${JSON.stringify(values)}`
+          );
+        }
+        await sleep(150);
+      }
+
+      const enabledFinal = await addBtn.isEnabled().catch(() => false);
+      if (!enabledFinal) {
+        const dump = await dialog
+          .evaluate((el) => String(el.innerText || "").slice(0, 800))
+          .catch(() => "");
+        pushBookingLog(`companion addBtn enable TIMEOUT i=${i} dialogText=${JSON.stringify(dump)}`);
+        throw new Error(`동반이용자 추가 버튼 활성화 실패 i=${i}`);
+      }
+
+      await addBtn.scrollIntoViewIfNeeded().catch(() => {});
+
+      const before = await chipList.count().catch(() => chipCount);
+      pushBookingLog(`companion click add i=${i} chipBefore=${before}`);
+      await addBtn.click({ timeout: 8000 }).catch(async (e) => {
+        pushBookingLog(`companion addBtn click failed i=${i} err=${e && e.message ? e.message : String(e)} -> retry`);
+        await sleep(200);
+        await addBtn.scrollIntoViewIfNeeded().catch(() => {});
+        await addBtn.click({ timeout: 8000, force: true });
+      });
+
+      await sleep(150);
+      const after = await chipList.count().catch(() => before);
+      pushBookingLog(`companion after click i=${i} chipAfter=${after}`);
+
+      if (after <= before) {
+        const dump = await dialog
+          .evaluate((el) => String(el.innerText || "").slice(0, 800))
+          .catch(() => "");
+        pushBookingLog(`companion chip not increased i=${i} before=${before} after=${after} dialogText=${JSON.stringify(dump)}`);
+        throw new Error(`동반이용자 추가 실패(칩 증가 없음) i=${i}`);
+      }
+
+      chipCount = after;
+      pushBookingLog(`companion added i=${i} chipCount=${chipCount}`);
     }
 
     const registerBtn = dialog.locator('button:has-text("등록")').first();
