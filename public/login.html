@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>중앙대 팀플룸 로그인</title>
+  <link rel="stylesheet" href="login.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="logo-wrap">
+        <img
+          class="cau-logo"
+          src="/images/cau-logo-kind.png"
+          alt="중앙대학교 로고"
+        >
+      </div>
+
+      <div class="hack-overlay" aria-hidden="true">
+        <div class="hack-terminal">
+          <div id="hackStatus" class="hack-status"></div>
+          <div class="hack-progress" role="progressbar" aria-label="로그인 진행률" aria-valuemin="0" aria-valuemax="100">
+            <div id="hackProgressBar" class="hack-progress-bar"></div>
+          </div>
+          <div id="hackProgressText" class="hack-progress-text"></div>
+        </div>
+      </div>
+
+  
+   
+
+      <div class="form-area">
+        <div class="field">
+          <label for="loginId">아이디</label>
+          <input id="loginId" type="text" autocomplete="username" placeholder="아이디">
+        </div>
+
+        <div class="field">
+          <label for="loginPassword">비밀번호</label>
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="비밀번호">
+        </div>
+
+        <button id="loginButton" type="button" class="login-button">
+          <span class="button-text">로그인</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const loginId = document.getElementById("loginId");
+    const loginPassword = document.getElementById("loginPassword");
+    const loginButton = document.getElementById("loginButton");
+    const cauLogo = document.querySelector(".cau-logo");
+    const hackStatus = document.getElementById("hackStatus");
+    const hackProgressBar = document.getElementById("hackProgressBar");
+    const hackProgressText = document.getElementById("hackProgressText");
+
+    async function attemptLogin() {
+      const id = loginId.value.trim();
+      const password = loginPassword.value;
+
+      if (!id || !password) {
+        alert("아이디와 비밀번호를 입력해주세요.");
+        return;
+      }
+
+      try {
+        loginButton.disabled = true;
+        document.body.classList.add("logging-in");
+        if (cauLogo) {
+          cauLogo.classList.add("logging-in");
+          cauLogo.src = "/images/cau-logo.png";
+        }
+
+        let lastStepText = "";
+        let lastRoomCount = 0;
+        let currentPct = 0;
+        let targetPct = 0;
+        let progressTimer = null;
+
+        function appendHackLog(line) {
+          if (!hackStatus) {
+            return;
+          }
+          const next = (hackStatus.textContent ? hackStatus.textContent + "\n" : "") + String(line);
+          const lines = next.split("\n").slice(-8);
+          hackStatus.textContent = lines.join("\n");
+        }
+
+        function setHackUi(label, pct) {
+          const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
+          if (hackStatus) {
+            hackStatus.textContent = label || "";
+          }
+          if (hackProgressBar) {
+            hackProgressBar.style.width = safePct + "%";
+          }
+          if (hackProgressText) {
+            hackProgressText.textContent = safePct ? safePct + "%" : "";
+          }
+        }
+
+        function renderProgress() {
+          if (hackProgressBar) {
+            hackProgressBar.style.width = Math.round(currentPct) + "%";
+          }
+          if (hackProgressText) {
+            const rounded = Math.round(currentPct);
+            hackProgressText.textContent = rounded ? rounded + "%" : "";
+          }
+        }
+
+        function startProgressAnimation() {
+          if (progressTimer) {
+            return;
+          }
+
+          progressTimer = setInterval(() => {
+            // 초당 약 18% 정도로 자연스럽게 증가 (너무 빠르면 100% 점프처럼 보임)
+            const speedPerTick = 0.9; // 50ms당 0.9% => 초당 18%
+            if (currentPct < targetPct) {
+              currentPct = Math.min(targetPct, currentPct + speedPerTick);
+              renderProgress();
+              return;
+            }
+
+            if (currentPct > targetPct) {
+              currentPct = targetPct;
+              renderProgress();
+            }
+
+            // 타겟에 도달하면 타이머를 멈춰서 CPU 낭비 방지
+            if (currentPct === targetPct) {
+              clearInterval(progressTimer);
+              progressTimer = null;
+            }
+          }, 50);
+        }
+
+        // 룸 5개 기준으로 20%씩 채우기
+        function updateHackUiFromState(stateData) {
+          const stepText = stateData && stateData.step ? String(stateData.step) : "";
+          const rooms = stateData && stateData.data && Array.isArray(stateData.data.rooms) ? stateData.data.rooms : [];
+          const roomCount = Math.max(0, Math.min(5, rooms.length));
+          const pct = roomCount * 20;
+
+          // 룸 수집 전: step 변화가 있을 때만 로그로 누적
+          if (stepText && stepText !== lastStepText) {
+            appendHackLog(stepText);
+            lastStepText = stepText;
+          }
+
+          // 룸 수집 시작 후: 팀플룸 1~5 기준으로 20%씩
+          if (roomCount > 0 && roomCount !== lastRoomCount) {
+            appendHackLog("팀플룸" + roomCount + " 진입 완료");
+            lastRoomCount = roomCount;
+          }
+
+          // 타겟 퍼센트는 룸 수 기준으로 계산하되, 표시 자체는 시간에 비례해 부드럽게 따라가게 함
+          targetPct = pct;
+          startProgressAnimation();
+        }
+
+        if (hackStatus) {
+          hackStatus.textContent = "";
+        }
+        appendHackLog("핸드쉐이크 진행중");
+
+        const response = await fetch("/api/run", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            id: id,
+            password: password
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("로그인 요청 실패");
+        }
+
+        // 로그인 성공까지 대기 (최대 30초)
+        let loginSuccess = false;
+        let attempts = 0;
+        const maxAttempts = 30;
+
+        while (!loginSuccess && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          attempts++;
+          
+          const stateResponse = await fetch("/api/state");
+          const stateData = await stateResponse.json();
+
+          updateHackUiFromState(stateData);
+          
+          // 로그인 성공 확인 (팀플룸 페이지 진입 단계까지)
+          if (stateData.step && stateData.step.includes("팀플룸 페이지")) {
+            loginSuccess = true;
+            break;
+          }
+          
+          // 에러 확인
+          if (stateData.status === "error" || stateData.error) {
+            throw new Error(stateData.error || "로그인 실패");
+          }
+          
+          // 스크래퍼가 멈춘 경우
+          if (!stateData.isRunning && stateData.status === "idle") {
+            throw new Error("로그인 실패 - 스크래퍼가 중단되었습니다");
+          }
+        }
+
+        if (!loginSuccess) {
+          throw new Error("로그인 시간 초과");
+        }
+
+        appendHackLog("로그인완료");
+        
+        setTimeout(() => {
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
+          // 로그인 성공하면 세션 저장하고 이동
+          sessionStorage.setItem("cau_login_id", id);
+          sessionStorage.setItem("cau_login_password", password);
+          sessionStorage.setItem("cau_logged_in", "true");
+          sessionStorage.setItem("cau_auto_run", "true");
+
+          window.location.href = "/dashboard";
+        }, 1000);
+        
+      } catch (err) {
+        appendHackLog("에러 발생");
+        
+        setTimeout(() => {
+          if (progressTimer) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
+          document.body.classList.remove("logging-in");
+          if (cauLogo) {
+            cauLogo.classList.remove("logging-in");
+            cauLogo.src = "/images/cau-logo-kind.png";
+          }
+          if (hackStatus) {
+            hackStatus.textContent = "";
+          }
+          if (hackProgressBar) {
+            hackProgressBar.style.width = "0%";
+          }
+          if (hackProgressText) {
+            hackProgressText.textContent = "";
+          }
+          currentPct = 0;
+          targetPct = 0;
+          loginButton.disabled = false;
+          alert(err && err.message ? err.message : "로그인 실패");
+        }, 1000);
+      }
+    }
+
+    loginButton.addEventListener("click", attemptLogin);
+
+    loginPassword.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        attemptLogin();
+      }
+    });
+  </script>
+</body>
+</html>

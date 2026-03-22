@@ -1,0 +1,234 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #eef2f7;
+  --panel: rgba(255, 255, 255, 0.94);
+  --line: #d7dfea;
+  --line-strong: #c6d0df;
+  --text: #2f3a4d;
+  --sub: #7f8a9b;
+  --accent: #0f4ea6;
+  --accent-2: #0a428f;
+  --shadow: 0 28px 70px rgba(17, 33, 58, 0.12);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  color: var(--text);
+  background: #eef2f7;
+  transition: background 0.25s ease;
+}
+
+body.logging-in {
+  background: #000000;
+}
+
+body.logging-in .login-card {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.hack-terminal {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: #00ff7a;
+}
+
+.hack-overlay {
+  display: none;
+  width: 100%;
+  max-width: 400px;
+  margin: 10px auto 0;
+  pointer-events: none;
+}
+
+body.logging-in .hack-overlay {
+  display: block;
+}
+
+.hack-status {
+  line-height: 1.55;
+  font-size: 14px;
+  text-shadow: 0 0 12px rgba(0, 255, 120, 0.2);
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow: hidden;
+}
+
+.hack-progress {
+  margin-top: 10px;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  background: rgba(0, 255, 120, 0.12);
+  overflow: hidden;
+}
+
+.hack-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(0, 255, 120, 0.35) 0%, rgba(0, 255, 120, 1) 100%);
+  box-shadow: 0 0 14px rgba(0, 255, 120, 0.25);
+  transition: width 0.35s ease;
+}
+
+.hack-progress-text {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 480px;
+  min-height: auto;
+  padding: 40px 32px 32px;
+  border: 1px solid #d9dee7;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  position: relative;
+  z-index: 100;
+}
+
+.logo-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.cau-logo {
+  width: 116px;
+  max-width: 100%;
+  display: block;
+  filter: drop-shadow(0 8px 18px rgba(15, 78, 166, 0.08));
+  transition: transform 0.35s ease, filter 0.35s ease;
+}
+
+.cau-logo.logging-in {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(3);
+  z-index: 10000;
+  filter: drop-shadow(0 0 28px rgba(255, 255, 255, 0.35));
+}
+
+body.logging-in .form-area {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.form-area {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  display: grid;
+  gap: 20px;
+}
+
+.field {
+  display: grid;
+  gap: 0;
+}
+
+.field label {
+  display: none;
+}
+
+.field input {
+  width: 100%;
+  height: 56px;
+  border-radius: 0;
+  border: 2px solid var(--line-strong);
+  background: #ffffff;
+  color: #6f6f72;
+  padding: 0 20px;
+  outline: none;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.field input::placeholder {
+  color: #777777;
+}
+
+.field input:focus {
+  border-color: #8ea9d1;
+  box-shadow: 0 0 0 6px rgba(15, 78, 166, 0.08);
+}
+
+.login-button {
+  margin-top: 24px;
+  height: 64px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 18px 36px rgba(15, 78, 166, 0.16);
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+}
+
+.login-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 40px rgba(15, 78, 166, 0.2);
+}
+
+.login-button:active {
+  transform: translateY(0);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .login-page {
+    padding: 14px;
+  }
+
+  .login-card {
+    padding: 24px 16px 20px;
+  }
+
+  .cau-logo {
+    width: 74px;
+  }
+
+  .form-area {
+    gap: 12px;
+  }
+
+  .field input {
+    height: 44px;
+    font-size: 16px;
+    padding: 0 16px;
+  }
+
+  .login-button {
+    height: 52px;
+    font-size: 18px;
+    margin-top: 12px;
+  }
+}
