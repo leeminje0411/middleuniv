@@ -369,24 +369,49 @@ async function selectDateOnListPage(page, dateValue) {
   await page.waitForSelector("select#reservableDate", { timeout: 20000 });
   pushBookingLog(`selectDateOnListPage reservableDate visible url=${page.url()}`);
 
-  await page.waitForFunction(
-    (value) => {
-      const dateSelect = document.querySelector("#reservableDate");
-      if (!dateSelect) return false;
-      const opts = Array.from(dateSelect.querySelectorAll("option")).map((o) => o.value);
-      return opts.includes(value);
-    },
-    { timeout: 20000 },
-    String(dateValue)
-  );
+  const wanted = String(dateValue);
+  const options = await page
+    .evaluate(() => {
+      const el = document.querySelector("#reservableDate");
+      if (!el) return [];
+      return Array.from(el.querySelectorAll("option")).map((o) => ({
+        value: String(o.value || ""),
+        text: String(o.textContent || "").trim()
+      }));
+    })
+    .catch(() => []);
 
-  await page.selectOption("#reservableDate", String(dateValue)).catch(async () => {
+  pushBookingLog(`selectDateOnListPage options=${JSON.stringify(options.slice(0, 40))}`);
+
+  let picked = options.find((o) => o.value === wanted) || null;
+  if (!picked) {
+    picked = options.find((o) => o.value && o.value.includes(wanted)) || null;
+  }
+  if (!picked) {
+    // Fallback: match by text containing MM/DD (e.g. "3월 22일")
+    const parts = wanted.split("-");
+    const mm = parts.length >= 2 ? String(Number(parts[1])) : "";
+    const dd = parts.length >= 3 ? String(Number(parts[2])) : "";
+    const token = mm && dd ? `${mm}월 ${dd}일` : "";
+    if (token) {
+      picked = options.find((o) => o.text && o.text.includes(token)) || null;
+    }
+  }
+
+  if (!picked || !picked.value) {
+    throw new Error(`예약 날짜 선택 실패: wanted=${wanted} options=${JSON.stringify(options.slice(0, 80))}`);
+  }
+
+  pushBookingLog(`selectDateOnListPage pick value=${picked.value} text=${picked.text}`);
+
+  await page.selectOption("#reservableDate", { value: picked.value }).catch(async () => {
     await page.evaluate((value) => {
       const dateSelect = document.querySelector("#reservableDate");
       if (!dateSelect) return;
       dateSelect.value = value;
+      dateSelect.dispatchEvent(new Event("input", { bubbles: true }));
       dateSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    }, String(dateValue));
+    }, picked.value);
   });
 
   await sleep(250);
@@ -442,24 +467,138 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
 
   async function waitSelectHasValue(selector, value, timeoutMs) {
     const wanted = String(value);
-    await page.waitForFunction(
-      ({ selector: sel, wantedValue }) => {
-        const el = document.querySelector(sel);
-        if (!el) return false;
-        const opts = Array.from(el.querySelectorAll("option"));
-        return opts.some((o) => String(o.value) === wantedValue || String(o.textContent || "").trim() === wantedValue);
-      },
-      { timeout: Number(timeoutMs) || 15000 },
-      { selector, wantedValue: wanted }
-    );
+    const timeout = Number(timeoutMs) || 15000;
+    const startedAt = Date.now();
+    const deadline = startedAt + timeout;
+    let lastLogAt = 0;
+
+    const hasWanted = async () => {
+      return await page
+        .evaluate(
+          ({ sel, wantedValue }) => {
+            const el = document.querySelector(sel);
+            if (!el) return { ok: false, reason: "no-select", optionCount: 0 };
+            const opts = Array.from(el.querySelectorAll("option"));
+            const ok = opts.some(
+              (o) => String(o.value) === wantedValue || String(o.textContent || "").trim() === wantedValue
+            );
+            return { ok, reason: ok ? "found" : "not-found", optionCount: opts.length, currentValue: String(el.value || "") };
+          },
+          { sel: selector, wantedValue: wanted }
+        )
+        .catch((e) => ({ ok: false, reason: `evaluate-error:${e && e.message ? e.message : String(e)}`, optionCount: 0 }));
+    };
+
+    while (Date.now() < deadline) {
+      const r = await hasWanted();
+      if (r && r.ok) return;
+
+      const now = Date.now();
+      if (!lastLogAt || now - lastLogAt >= 1500) {
+        lastLogAt = now;
+        pushBookingLog(
+          `waitSelectHasValue polling selector=${selector} wanted=${wanted} reason=${r && r.reason ? r.reason : "?"} optionCount=${r && r.optionCount != null ? r.optionCount : "?"} currentValue=${r && r.currentValue != null ? r.currentValue : ""} elapsedMs=${now - startedAt}`
+        );
+      }
+
+      await sleep(150);
+    }
+
+    const finalDump = await page
+      .evaluate(
+        ({ sel }) => {
+          const el = document.querySelector(sel);
+          if (!el) return { found: false, value: null, options: [] };
+          const opts = Array.from(el.querySelectorAll("option")).map((o) => ({
+            value: String(o.value || ""),
+            text: String(o.textContent || "").trim()
+          }));
+          return { found: true, value: String(el.value || ""), options: opts.slice(0, 80) };
+        },
+        { sel: selector }
+      )
+      .catch(() => ({ found: false, value: null, options: [] }));
+
+    pushBookingLog(`waitSelectHasValue TIMEOUT selector=${selector} wanted=${wanted} dump=${JSON.stringify(finalDump)}`);
+    throw new Error(`waitSelectHasValue timeout selector=${selector} wanted=${wanted}`);
   }
 
   async function selectOptionRobust(selector, valueOrLabel) {
     const v = String(valueOrLabel);
+
+    pushBookingLog(`selectOptionRobust start selector=${selector} wanted=${v} url=${page.url()}`);
+    await page.waitForSelector(selector, { timeout: 20000 });
+
+    const optionDumpBefore = await page
+      .evaluate(
+        ({ sel }) => {
+          const el = document.querySelector(sel);
+          if (!el) return { found: false, options: [] };
+          const opts = Array.from(el.querySelectorAll("option")).map((o) => ({
+            value: String(o.value || ""),
+            text: String(o.textContent || "").trim()
+          }));
+          return { found: true, options: opts.slice(0, 60) };
+        },
+        { sel: selector }
+      )
+      .catch(() => ({ found: false, options: [] }));
+
+    pushBookingLog(`selectOptionRobust options selector=${selector} dump=${JSON.stringify(optionDumpBefore)}`);
+
+    pushBookingLog(`selectOptionRobust waitSelectHasValue selector=${selector} wanted=${v}`);
     await waitSelectHasValue(selector, v, 20000);
+    pushBookingLog(`selectOptionRobust waitSelectHasValue done selector=${selector} wanted=${v}`);
+
+    pushBookingLog(`selectOptionRobust selectOption selector=${selector} wanted=${v}`);
     await page.selectOption(selector, { value: v }).catch(async () => {
       await page.selectOption(selector, { label: v });
     });
+    pushBookingLog(`selectOptionRobust selectOption done selector=${selector} wanted=${v}`);
+
+    await page
+      .evaluate((sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }, selector)
+      .catch(() => {});
+
+    pushBookingLog(`selectOptionRobust dispatch done selector=${selector} wanted=${v}`);
+
+    const applied = await page
+      .evaluate(
+        ({ sel, wanted }) => {
+          const el = document.querySelector(sel);
+          if (!el) return { ok: false, value: null };
+          return { ok: String(el.value) === String(wanted), value: String(el.value || "") };
+        },
+        { sel: selector, wanted: v }
+      )
+      .catch(() => ({ ok: false, value: null }));
+
+    if (!applied || !applied.ok) {
+      const optionDumpAfter = await page
+        .evaluate(
+          ({ sel }) => {
+            const el = document.querySelector(sel);
+            if (!el) return { found: false, options: [] };
+            const opts = Array.from(el.querySelectorAll("option")).map((o) => ({
+              value: String(o.value || ""),
+              text: String(o.textContent || "").trim()
+            }));
+            return { found: true, value: String(el.value || ""), options: opts.slice(0, 60) };
+          },
+          { sel: selector }
+        )
+        .catch(() => ({ found: false, options: [] }));
+
+      pushBookingLog(`selectOptionRobust FAILED selector=${selector} wanted=${v} applied=${JSON.stringify(applied)} after=${JSON.stringify(optionDumpAfter)}`);
+      throw new Error(`selectOptionRobust 실패: selector=${selector} wanted=${v}`);
+    }
+
+    pushBookingLog(`selectOptionRobust done selector=${selector} wanted=${v} url=${page.url()}`);
   }
 
   async function closeCurtainIfPresent() {
@@ -670,9 +809,23 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
     }
 
     // 상세 페이지에서 날짜/시간 선택
+    pushBookingLog(`detail form: closeCurtainIfPresent url=${page.url()}`);
+    await closeCurtainIfPresent();
+    pushBookingLog(`detail form: curtain checked(before selects) url=${page.url()}`);
     if (dateValue) {
       pushBookingLog(`detail form: select hopeDate=${String(dateValue)} url=${page.url()}`);
-      await selectOptionRobust("#hopeDate", String(dateValue)).catch(() => {});
+      const currentHope = await page
+        .evaluate(() => {
+          const el = document.querySelector("#hopeDate");
+          return el ? String(el.value || "") : "";
+        })
+        .catch(() => "");
+
+      if (String(currentHope) === String(dateValue)) {
+        pushBookingLog(`detail form: hopeDate already set (${currentHope}) -> skip`);
+      } else {
+        await selectOptionRobust("#hopeDate", String(dateValue));
+      }
       await sleep(120);
       pushBookingLog(`detail form: hopeDate selected url=${page.url()}`);
     }
@@ -680,6 +833,7 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
     pushBookingLog(`detail form: beginTime=${String(beginTime)} endTime=${String(endTime)} url=${page.url()}`);
     console.log(`[api/book] request ${JSON.stringify({ roomIndex, roomId: normalizedRoomId || null, dateValue, beginTime, endTime })}`);
     await closeCurtainIfPresent();
+    pushBookingLog(`detail form: curtain checked url=${page.url()}`);
 
     pushBookingLog(`detail form: select beginTime=${String(beginTime)} url=${page.url()}`);
     await selectOptionRobust("#beginTime", String(beginTime));
@@ -688,6 +842,10 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
     pushBookingLog(`detail form: beginTime selected url=${page.url()}`);
 
     pushBookingLog(`detail form: select endTime=${String(endTime)} url=${page.url()}`);
+    await waitSelectHasValue("#endTime", String(endTime), 30000).catch((e) => {
+      pushBookingLog(`detail form: endTime options not ready: ${e && e.message ? e.message : String(e)}`);
+      throw e;
+    });
     await selectOptionRobust("#endTime", String(endTime));
     console.log(`[api/book] endTime selected ${endTime}`);
     await sleep(120);

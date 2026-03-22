@@ -384,6 +384,8 @@ export default function DashboardPage() {
       return;
     }
 
+    const resolvedRoomId = activeRoom && activeRoom.roomId ? String(activeRoom.roomId) : (fallbackRoomIdFromIndex(activeRoom) ? String(fallbackRoomIdFromIndex(activeRoom)) : null);
+
     const login = getStoredLogin();
     if (!login) {
       window.location.href = "/login";
@@ -404,7 +406,7 @@ export default function DashboardPage() {
           id: login.id,
           password: login.password,
           roomIndex: activeRoom.index,
-          roomId: activeRoom.roomId,
+          roomId: resolvedRoomId,
           dateValue,
           beginTime,
           endTime
