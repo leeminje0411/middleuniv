@@ -34,7 +34,7 @@ export default function LoginPage() {
   }, [isRunning, loginId, loginPassword]);
 
   async function pollUntilLoginStep() {
-    const maxMs = 45_000;
+    const maxMs = 120_000;
     const started = Date.now();
 
     while (Date.now() - started < maxMs) {
@@ -54,6 +54,17 @@ export default function LoginPage() {
         setPct(Math.max(0, Math.min(100, p)));
       }
 
+      try {
+        console.log("[login] state", {
+          isRunning: j && j.isRunning,
+          status: j && j.status,
+          progress: j && j.progress,
+          step: j && j.step
+        });
+      } catch (e) {
+        // ignore
+      }
+
       if (j && (j.status === "error" || j.error)) {
         throw new Error(j.error || "로그인 실패");
       }
@@ -62,12 +73,12 @@ export default function LoginPage() {
         throw new Error("스크래퍼가 중단되었습니다");
       }
 
-      if (step.includes("팀플룸 페이지") || step.includes("팀플룸 리스트")) {
+      if (j && (j.status === "done" || (j.progress != null && Number(j.progress) >= 100))) {
         return;
       }
     }
 
-    throw new Error("로그인 대기 시간 초과");
+    throw new Error("완료 대기 시간 초과");
   }
 
   async function runAndWait() {
@@ -102,6 +113,11 @@ export default function LoginPage() {
       sessionStorage.setItem("cau_login_password", password);
       sessionStorage.setItem("cau_logged_in", "true");
 
+      try {
+        console.log("[login] redirect to /dashboard");
+      } catch (e) {
+        // ignore
+      }
       window.location.href = "/dashboard";
     } catch (e) {
       const msg = e && e.message ? String(e.message) : "로그인 실패";
@@ -121,15 +137,15 @@ export default function LoginPage() {
           <img className={"cau-logo" + (isRunning ? " logging-in" : "")} src={isRunning ? "/images/cau-logo.png" : "/images/cau-logo-kind.png"} alt="중앙대학교 로고" />
         </div>
 
-        <div className="hack-overlay" aria-hidden={!isRunning}>
-          <div className="hack-terminal">
-            <div className="hack-status">{statusText}</div>
-            <div className="hack-progress" role="progressbar" aria-label="로그인 진행률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-              <div className="hack-progress-bar" style={{ width: `${pct}%` }} />
+        {isRunning ? (
+          <div className="login-loading" aria-live="polite">
+            <div className="login-loading-text">{statusText || "로그인 중..."}</div>
+            <div className="login-loading-bar" role="progressbar" aria-label="로그인 진행률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+              <div className="login-loading-bar-fill" style={{ width: `${pct}%` }} />
             </div>
-            <div className="hack-progress-text">{pct ? `${Math.round(pct)}%` : ""}</div>
+            <div className="login-loading-pct">{pct ? `${Math.round(pct)}%` : ""}</div>
           </div>
-        </div>
+        ) : null}
 
         <form
           className="form-area"

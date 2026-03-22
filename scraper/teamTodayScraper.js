@@ -301,12 +301,31 @@ async function doLogin(page, loginId, password) {
       .filter((x) => x.visible);
   });
 
-  const idInput = visibleInputs.find((x) => x.type !== "password");
-  const pwInput = visibleInputs.find((x) => x.type === "password");
+  let idInput = visibleInputs.find((x) => x.type !== "password");
+  let pwInput = visibleInputs.find((x) => x.type === "password");
+
+  // Fallback: direct selector based (more robust across layout changes)
+  if (!pwInput) {
+    const pwCount = await page.locator('input[type="password"]').count().catch(() => 0);
+    if (pwCount > 0) {
+      const pwIdx = await page.locator('input[type="password"]').first().evaluate((el) => {
+        const all = Array.from(document.querySelectorAll("input"));
+        return all.indexOf(el);
+      }).catch(() => -1);
+      if (pwIdx >= 0) {
+        pwInput = { idx: pwIdx, type: "password", visible: true };
+      }
+    }
+  }
+
+  if (!idInput && pwInput) {
+    const idIdx = Math.max(0, Number(pwInput.idx) - 1);
+    idInput = { idx: idIdx, type: "text", visible: true };
+  }
 
   if (!idInput || !pwInput) {
     throw new Error(
-      `로그인 입력창을 찾지 못했습니다. 감지된 input: ${JSON.stringify(inputsDebug)}`
+      `로그인 입력창을 찾지 못했습니다. url=${page.url()} 감지된 input: ${JSON.stringify(inputsDebug)}`
     );
   }
 

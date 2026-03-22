@@ -54,6 +54,36 @@ let session = null;
 let jobState = null;
 let playwrightLock = Promise.resolve();
 
+function ensureBookingState() {
+  if (!jobState) {
+    jobState = makeIdleState();
+  }
+  if (!jobState.booking) {
+    jobState.booking = {
+      isRunning: false,
+      step: null,
+      url: null,
+      targetUrl: null,
+      error: null,
+      startedAt: null,
+      finishedAt: null
+    };
+  }
+  return jobState.booking;
+}
+
+function pushBookingLog(line) {
+  ensureBookingState();
+  pushJobLog(`[book] ${String(line || "").trim()}`);
+}
+
+function setBookingStep(step, urlValue, targetUrlValue) {
+  const b = ensureBookingState();
+  b.step = step ? String(step) : b.step;
+  if (urlValue != null) b.url = String(urlValue);
+  if (targetUrlValue != null) b.targetUrl = String(targetUrlValue);
+}
+
 function withPlaywrightLock(fn) {
   const next = playwrightLock.then(fn);
   playwrightLock = next.catch(() => {});
@@ -114,24 +144,29 @@ function pushJobLog(line) {
   }
 }
 
-async function getOrCreateSession({ loginId, password }) {
+async function getOrCreateSession({ loginId, password, headless }) {
   const normalizedId = String(loginId || "").trim();
   if (!normalizedId || !password) {
     throw new Error("아이디와 비밀번호가 필요합니다.");
   }
 
-  if (session && session.browser && session.context && session.page && session.loginId === normalizedId) {
-    session.lastActiveAt = new Date().toISOString();
-    return session;
+  const desiredHeadless = typeof headless === "boolean" ? headless : process.env.BOOK_HEADLESS === "true";
+
+  if (session && session.loginId === normalizedId) {
+    if (typeof session.headless === "boolean" && session.headless !== desiredHeadless) {
+      await closeSession().catch(() => {});
+      session = null;
+    } else {
+      return session;
+    }
   }
 
   if (session) {
-    await closeSession().catch(() => {});
+    return session;
   }
 
-  const headless = process.env.BOOK_HEADLESS === "true";
   const slowMo = Number(process.env.BOOK_SLOWMO_MS) || 0;
-  const browser = await chromium.launch({ headless, slowMo });
+  const browser = await chromium.launch({ headless: desiredHeadless, slowMo });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } });
   const page = await context.newPage();
 
@@ -140,7 +175,9 @@ async function getOrCreateSession({ loginId, password }) {
     context,
     page,
     loginId: normalizedId,
-    password: String(password),
+    password,
+    headless: desiredHeadless,
+    createdAt: new Date().toISOString(),
     lastActiveAt: new Date().toISOString()
   };
 
@@ -156,15 +193,51 @@ async function closeSession() {
 }
 
 async function ensureLoggedIn(page, loginId, password) {
+  const BASE_URL = "https://library.cau.ac.kr";
   const currentUrl = String(page.url() || "");
-  if (currentUrl.includes("/login")) {
+  pushBookingLog(`ensureLoggedIn enter url=${currentUrl}`);
+
+  const isBlank = currentUrl === "about:blank";
+  if (isBlank) {
+    pushBookingLog("ensureLoggedIn: about:blank -> doLoginForBooking");
     await doLoginForBooking(page, loginId, password);
+    pushBookingLog(`ensureLoggedIn: after login url=${page.url()}`);
+    return;
+  }
+
+  if (currentUrl.includes("/login")) {
+    pushBookingLog("ensureLoggedIn: on /login -> doLoginForBooking");
+    await doLoginForBooking(page, loginId, password);
+    pushBookingLog(`ensureLoggedIn: after login url=${page.url()}`);
     return;
   }
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
-  if (bodyText.includes("중앙대학교 통합 LOGIN") || bodyText.includes("로그인")) {
+  if (!String(bodyText || "").trim()) {
+    pushBookingLog("ensureLoggedIn: empty body -> doLoginForBooking");
     await doLoginForBooking(page, loginId, password);
+    pushBookingLog(`ensureLoggedIn: after login url=${page.url()}`);
+    return;
+  }
+
+  // Detect real login screen marker (avoid naive '로그인' substring which appears in many pages)
+  if (bodyText.includes("중앙대학교 통합 LOGIN")) {
+    pushBookingLog("ensureLoggedIn: login screen detected -> doLoginForBooking");
+    await doLoginForBooking(page, loginId, password);
+    pushBookingLog(`ensureLoggedIn: after login url=${page.url()}`);
+  } else {
+    pushBookingLog("ensureLoggedIn: assume already logged in");
+  }
+
+  // Verify we are not stuck on login page
+  const afterUrl = String(page.url() || "");
+  const afterBody = await page.locator("body").innerText().catch(() => "");
+  if (afterUrl.includes("/login") || afterBody.includes("중앙대학교 통합 LOGIN")) {
+    throw new Error("로그인 실패: 로그인 페이지에서 벗어나지 못했습니다.");
+  }
+
+  if (!afterUrl.startsWith(BASE_URL)) {
+    pushBookingLog(`ensureLoggedIn: warning unexpected url=${afterUrl}`);
   }
 }
 
@@ -287,27 +360,46 @@ async function doLoginForBooking(page, loginId, password) {
 }
 
 async function selectDateOnListPage(page, dateValue) {
-  if (!dateValue) return;
-  await page.evaluate((value) => {
-    const dateSelect = document.querySelector("#reservableDate");
-    if (!dateSelect) return false;
-    const opts = Array.from(dateSelect.querySelectorAll("option")).map((o) => o.value);
-    if (!opts.includes(value)) {
-      return false;
-    }
-    dateSelect.value = value;
-    dateSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;
-  }, String(dateValue));
+  pushBookingLog(`selectDateOnListPage start dateValue=${String(dateValue || "")}`);
+  if (!dateValue) {
+    pushBookingLog("selectDateOnListPage skip (no dateValue)");
+    return;
+  }
+
+  await page.waitForSelector("select#reservableDate", { timeout: 20000 });
+  pushBookingLog(`selectDateOnListPage reservableDate visible url=${page.url()}`);
+
+  await page.waitForFunction(
+    (value) => {
+      const dateSelect = document.querySelector("#reservableDate");
+      if (!dateSelect) return false;
+      const opts = Array.from(dateSelect.querySelectorAll("option")).map((o) => o.value);
+      return opts.includes(value);
+    },
+    { timeout: 20000 },
+    String(dateValue)
+  );
+
+  await page.selectOption("#reservableDate", String(dateValue)).catch(async () => {
+    await page.evaluate((value) => {
+      const dateSelect = document.querySelector("#reservableDate");
+      if (!dateSelect) return;
+      dateSelect.value = value;
+      dateSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    }, String(dateValue));
+  });
 
   await sleep(250);
 
   const submitBtn = page.locator('button:has-text("조회")').first();
   if (await submitBtn.count().catch(() => 0)) {
+    pushBookingLog("selectDateOnListPage click 조회");
     await submitBtn.click().catch(() => {});
-    await page.waitForLoadState("networkidle").catch(() => {});
-    await sleep(600);
+    await page.waitForLoadState("domcontentloaded").catch(() => {});
+    await sleep(350);
   }
+
+  pushBookingLog(`selectDateOnListPage done url=${page.url()}`);
 }
 
 async function openRoomDetailByIndex(page, roomIndex) {
@@ -315,13 +407,20 @@ async function openRoomDetailByIndex(page, roomIndex) {
   if (!Number.isFinite(idx) || idx < 0) {
     throw new Error("roomIndex가 올바르지 않습니다.");
   }
+  pushBookingLog(`openRoomDetailByIndex start idx=${idx} url=${page.url()}`);
   const card = page.locator(".ikc-card-rooms").nth(idx);
   const reserveBtn = card.locator('button:has-text("예약")').first();
+  if (!(await reserveBtn.count().catch(() => 0))) {
+    throw new Error("예약 버튼을 찾지 못했습니다.");
+  }
+
+  pushBookingLog("openRoomDetailByIndex click 예약");
   await Promise.all([
     page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {}),
     reserveBtn.click({ timeout: 15000 })
   ]);
   await page.waitForSelector(".ikc-room-info", { timeout: 20000 });
+  pushBookingLog(`openRoomDetailByIndex done url=${page.url()}`);
 }
 
 async function performBooking({ id, password, roomIndex, roomId, dateValue, beginTime, endTime, reusePage }) {
@@ -334,6 +433,12 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
   const browser = usingInjectedPage ? null : await chromium.launch({ headless, slowMo });
   const context = usingInjectedPage ? null : await browser.newContext({ viewport: { width: 1440, height: 1200 } });
   const page = usingInjectedPage ? reusePage : await context.newPage();
+
+  // When reusing a session page (headful booking session), we might be on about:blank with no cookies.
+  // Ensure login is established before attempting to open protected booking pages.
+  setBookingStep("ensureLoggedIn", page.url(), null);
+  await ensureLoggedIn(page, id, password);
+  setBookingStep("ensureLoggedIn:done", page.url(), null);
 
   async function waitSelectHasValue(selector, value, timeoutMs) {
     const wanted = String(value);
@@ -442,39 +547,67 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
       await sleep(120);
     }
 
-    const group = page.locator('mat-radio-group[formcontrolname="agree"], [formcontrolname="agree"] mat-radio-group').first();
+    const group = page
+      .locator('mat-radio-group[formcontrolname="agree"], [formcontrolname="agree"] mat-radio-group')
+      .first();
     await group.waitFor({ state: "visible", timeout: 15000 });
 
-    // Click via input element + dispatch events
     const input = group.locator('input.mat-radio-input[value="true"], input[type="radio"][value="true"]').first();
     if (!(await input.count().catch(() => 0))) {
       throw new Error("동의 라디오 input(true)을 찾지 못했습니다.");
     }
 
-    await input.evaluate((el) => {
-      el.scrollIntoView({ block: "center", inline: "center" });
-      el.click();
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const maxTries = 3;
+    for (let attempt = 1; attempt <= maxTries; attempt++) {
+      console.log(`[api/book] agree try ${attempt}/${maxTries}`);
 
-    await sleep(120);
+      const inputId = await input.getAttribute("id").catch(() => null);
 
-    const checked = await group
-      .locator('mat-radio-button.mat-radio-checked:has(input[value="true"])')
-      .count()
-      .then((n) => n > 0)
-      .catch(() => false);
+      // Prefer clicking <label for="inputId"> because Angular Material binds there reliably.
+      if (inputId) {
+        await group.evaluate(
+          ({ root, id }) => {
+            const label = root.querySelector(`label[for="${CSS.escape(id)}"]`);
+            if (label) {
+              label.scrollIntoView({ block: "center", inline: "center" });
+              label.click();
+            }
+          },
+          { root: undefined, id: inputId }
+        ).catch(() => {});
+      }
 
-    if (!checked) {
-      const ariaChecked = await input.getAttribute("aria-checked").catch(() => null);
-      const isChecked = await input.evaluate((el) => Boolean(el.checked)).catch(() => false);
-      if (!(ariaChecked === "true" || isChecked)) {
-        throw new Error("동의 라디오 선택 실패: '위 사항을 확인하고 동의합니다' (true) 가 체크되지 않았습니다.");
+      // Fallback: click input + dispatch events
+      await input
+        .evaluate((el) => {
+          el.scrollIntoView({ block: "center", inline: "center" });
+          el.click();
+          el.checked = true;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        })
+        .catch(() => {});
+
+      await sleep(150);
+
+      const checkedByClass = await group
+        .locator('mat-radio-button.mat-radio-checked:has(input[value="true"])')
+        .count()
+        .then((n) => n > 0)
+        .catch(() => false);
+      const checkedByInput = await input.evaluate((el) => Boolean(el.checked)).catch(() => false);
+
+      if (checkedByClass || checkedByInput) {
+        console.log("[api/book] agree(true) selected");
+        return;
       }
     }
 
-    console.log("[api/book] agree(true) selected");
+    const groupHtml = await group
+      .evaluate((el) => (el ? String(el.innerHTML || "").slice(0, 4000) : ""))
+      .catch(() => "");
+    console.log("[api/book] agree group html (head):", groupHtml);
+    throw new Error("동의 라디오 선택 실패: '위 사항을 확인하고 동의합니다' (true) 가 체크되지 않았습니다.");
   }
 
   async function selectUseSectionOrThrow() {
@@ -496,9 +629,7 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
   }
 
   try {
-    if (!usingInjectedPage) {
-      await doLoginForBooking(page, id, password);
-    }
+    // doLoginForBooking is invoked via ensureLoggedIn above.
 
     const normalizedDate = dateValue ? String(dateValue) : "";
     const normalizedRoomId = roomId != null && String(roomId).trim() ? String(roomId).trim() : "";
@@ -507,38 +638,64 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
       const detailUrl = `${BASE_URL}/library-services/room/team-rooms/${encodeURIComponent(
         normalizedRoomId
       )}/${encodeURIComponent(normalizedDate)}?tabIndex=2&hopeDate=${encodeURIComponent(normalizedDate)}`;
+      setBookingStep("gotoDetail", page.url(), detailUrl);
+      pushBookingLog(`goto detailUrl=${detailUrl}`);
       await page.goto(detailUrl, { waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("networkidle").catch(() => {});
+
+      // If unauthenticated, the site may bounce us to home or a non-detail page.
+      const afterUrl = String(page.url() || "");
+      pushBookingLog(`after goto detail url=${afterUrl}`);
+      if (!afterUrl.includes("/library-services/room/team-rooms/") || afterUrl === BASE_URL + "/") {
+        pushBookingLog("detail navigation bounced -> re-ensureLoggedIn and retry");
+        setBookingStep("retryLogin", afterUrl, detailUrl);
+        await ensureLoggedIn(page, id, password);
+        pushBookingLog(`after re-login url=${page.url()}`);
+        await page.goto(detailUrl, { waitUntil: "domcontentloaded" });
+        pushBookingLog(`after retry goto url=${page.url()}`);
+      }
       await page.waitForSelector(".ikc-room-info", { timeout: 20000 });
+      setBookingStep("detailReady", page.url(), detailUrl);
     } else {
+      setBookingStep("gotoList", page.url(), TEAM_URL);
+      pushBookingLog(`goto TEAM_URL=${TEAM_URL}`);
       await page.goto(TEAM_URL, { waitUntil: "domcontentloaded" });
-      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForSelector(".ikc-card-rooms", { timeout: 20000 });
       await page.waitForSelector(".ikc-card-rooms", { timeout: 20000 });
 
       await selectDateOnListPage(page, dateValue);
       await page.waitForSelector(".ikc-card-rooms", { timeout: 20000 });
 
       await openRoomDetailByIndex(page, roomIndex);
+      setBookingStep("detailReady", page.url(), null);
     }
 
     // 상세 페이지에서 날짜/시간 선택
     if (dateValue) {
+      pushBookingLog(`detail form: select hopeDate=${String(dateValue)} url=${page.url()}`);
       await selectOptionRobust("#hopeDate", String(dateValue)).catch(() => {});
       await sleep(120);
+      pushBookingLog(`detail form: hopeDate selected url=${page.url()}`);
     }
 
+    pushBookingLog(`detail form: beginTime=${String(beginTime)} endTime=${String(endTime)} url=${page.url()}`);
     console.log(`[api/book] request ${JSON.stringify({ roomIndex, roomId: normalizedRoomId || null, dateValue, beginTime, endTime })}`);
     await closeCurtainIfPresent();
 
+    pushBookingLog(`detail form: select beginTime=${String(beginTime)} url=${page.url()}`);
     await selectOptionRobust("#beginTime", String(beginTime));
     console.log(`[api/book] beginTime selected ${beginTime}`);
     await sleep(120);
+    pushBookingLog(`detail form: beginTime selected url=${page.url()}`);
 
+    pushBookingLog(`detail form: select endTime=${String(endTime)} url=${page.url()}`);
     await selectOptionRobust("#endTime", String(endTime));
     console.log(`[api/book] endTime selected ${endTime}`);
     await sleep(120);
+    pushBookingLog(`detail form: endTime selected url=${page.url()}`);
 
+    pushBookingLog(`detail form: select useSection=1 url=${page.url()}`);
     await selectUseSectionOrThrow();
+    pushBookingLog(`detail form: useSection selected url=${page.url()}`);
     await addCompanionsIfAny();
     await agreeTrueOrThrow();
 
@@ -686,19 +843,46 @@ const server = http.createServer(async (req, res) => {
       }
 
       const result = await withPlaywrightLock(async () => {
-        const s = await getOrCreateSession({ loginId: id, password });
+        const b = ensureBookingState();
+        b.isRunning = true;
+        b.startedAt = new Date().toISOString();
+        b.finishedAt = null;
+        b.error = null;
+        setBookingStep("start", null, null);
+        pushBookingLog(
+          `request ${JSON.stringify({ roomIndex: roomIndex ?? null, roomId: roomId ?? null, dateValue, beginTime, endTime })}`
+        );
+
+        const bookHeadless = process.env.BOOK_BOOK_HEADLESS === "true";
+        const s = await getOrCreateSession({ loginId: id, password, headless: bookHeadless });
+        pushBookingLog(`session headless=${Boolean(s && s.headless)} currentUrl=${s && s.page ? s.page.url() : "(no page)"}`);
         await ensureLoggedIn(s.page, s.loginId, s.password);
         s.lastActiveAt = new Date().toISOString();
-        return await performBooking({
-          id: s.loginId,
-          password: s.password,
-          roomIndex,
-          roomId,
-          dateValue,
-          beginTime,
-          endTime,
-          reusePage: s.page
-        });
+
+        try {
+          const result = await performBooking({
+            id: s.loginId,
+            password: s.password,
+            roomIndex,
+            roomId,
+            dateValue,
+            beginTime,
+            endTime,
+            reusePage: s.page
+          });
+          b.isRunning = false;
+          b.finishedAt = new Date().toISOString();
+          setBookingStep("done", s.page.url(), null);
+          pushBookingLog("done");
+          return result;
+        } catch (e) {
+          b.isRunning = false;
+          b.finishedAt = new Date().toISOString();
+          b.error = e && e.message ? String(e.message) : String(e);
+          setBookingStep("error", s.page.url(), null);
+          pushBookingLog(`error ${b.error}`);
+          throw e;
+        }
       });
 
       sendJson(res, 200, result);
@@ -815,7 +999,8 @@ const server = http.createServer(async (req, res) => {
       withPlaywrightLock(async () => {
         try {
           pushJobLog("[worker] 세션 준비 중...");
-          const s = await getOrCreateSession({ loginId: id, password });
+          const scrapeHeadless = process.env.BOOK_HEADLESS === "true";
+          const s = await getOrCreateSession({ loginId: id, password, headless: scrapeHeadless });
           await ensureLoggedIn(s.page, s.loginId, s.password);
           s.lastActiveAt = new Date().toISOString();
 

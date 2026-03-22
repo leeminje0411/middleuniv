@@ -29,6 +29,11 @@ body {
   background: var(--bg);
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body.modal-open {
   overflow: hidden;
 }
@@ -513,6 +518,29 @@ body.modal-open {
 }
 
 @media (max-width: 560px) {
+  .navbar-container {
+    flex-wrap: wrap;
+    height: auto;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    row-gap: 10px;
+  }
+
+  .navbar-right {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .topbar-right {
+    width: 100%;
+  }
+
   .reservation-sheet {
     margin: 18px auto;
     max-height: calc(100vh - 36px);

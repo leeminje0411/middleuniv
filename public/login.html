@@ -140,23 +140,15 @@
           }, 50);
         }
 
-        // 룸 5개 기준으로 20%씩 채우기
         function updateHackUiFromState(stateData) {
           const stepText = stateData && stateData.step ? String(stateData.step) : "";
-          const rooms = stateData && stateData.data && Array.isArray(stateData.data.rooms) ? stateData.data.rooms : [];
-          const roomCount = Math.max(0, Math.min(5, rooms.length));
-          const pct = roomCount * 20;
+          const serverPctRaw = stateData && stateData.progress != null ? Number(stateData.progress) : NaN;
+          const pct = Number.isFinite(serverPctRaw) ? Math.max(0, Math.min(100, serverPctRaw)) : 0;
 
           // 룸 수집 전: step 변화가 있을 때만 로그로 누적
           if (stepText && stepText !== lastStepText) {
             appendHackLog(stepText);
             lastStepText = stepText;
-          }
-
-          // 룸 수집 시작 후: 팀플룸 1~5 기준으로 20%씩
-          if (roomCount > 0 && roomCount !== lastRoomCount) {
-            appendHackLog("팀플룸" + roomCount + " 진입 완료");
-            lastRoomCount = roomCount;
           }
 
           // 타겟 퍼센트는 룸 수 기준으로 계산하되, 표시 자체는 시간에 비례해 부드럽게 따라가게 함
@@ -184,10 +176,11 @@
           throw new Error("로그인 요청 실패");
         }
 
-        // 로그인 성공까지 대기 (최대 30초)
+        // 스크래핑 완료까지 대기
         let loginSuccess = false;
+        let redirected = false;
         let attempts = 0;
-        const maxAttempts = 30;
+        const maxAttempts = 120;
 
         while (!loginSuccess && attempts < maxAttempts) {
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -198,10 +191,22 @@
 
           updateHackUiFromState(stateData);
           
-          // 로그인 성공 확인 (팀플룸 페이지 진입 단계까지)
-          if (stateData.step && stateData.step.includes("팀플룸 페이지")) {
+          // 완료 확인 (정확하게 done 기준)
+          if (stateData.status === "done") {
             loginSuccess = true;
             break;
+          }
+
+          try {
+            console.log("[public/login] poll", {
+              url: window.location.href,
+              status: stateData && stateData.status,
+              progress: stateData && stateData.progress,
+              isRunning: stateData && stateData.isRunning,
+              step: stateData && stateData.step
+            });
+          } catch (e) {
+            // ignore
           }
           
           // 에러 확인
@@ -219,20 +224,36 @@
           throw new Error("로그인 시간 초과");
         }
 
-        appendHackLog("로그인완료");
+        appendHackLog("완료");
+        appendHackLog("대시보드로 이동합니다...");
         
         setTimeout(() => {
           if (progressTimer) {
             clearInterval(progressTimer);
             progressTimer = null;
           }
-          // 로그인 성공하면 세션 저장하고 이동
-          sessionStorage.setItem("cau_login_id", id);
-          sessionStorage.setItem("cau_login_password", password);
-          sessionStorage.setItem("cau_logged_in", "true");
-          sessionStorage.setItem("cau_auto_run", "true");
+          if (redirected) {
+            return;
+          }
+          redirected = true;
 
-          window.location.href = "/dashboard";
+          try {
+            // 로그인 성공하면 세션 저장하고 이동
+            sessionStorage.setItem("cau_login_id", id);
+            sessionStorage.setItem("cau_login_password", password);
+            sessionStorage.setItem("cau_logged_in", "true");
+            sessionStorage.setItem("cau_auto_run", "true");
+          } catch (e) {
+            appendHackLog("세션 저장 실패");
+          }
+
+          try {
+            console.log("[public/login] redirect", { to: "/dashboard", from: window.location.href });
+          } catch (e) {
+            // ignore
+          }
+
+          window.location.assign("/dashboard");
         }, 1000);
         
       } catch (err) {
