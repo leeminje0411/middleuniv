@@ -1,5 +1,5 @@
 {
-  "scrapedAt": "2026-03-22T05:49:40.594Z",
+  "scrapedAt": "2026-03-22T06:54:59.121Z",
   "sourceUrl": "https://library.cau.ac.kr/library-services/room/team-rooms?tabIndex=2",
   "selectedDateValue": "2026-03-22",
   "selectedDateLabel": "3월 22일",
@@ -13,167 +13,125 @@
       "slots": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:10",
-          "startMinute": 840,
-          "endMinute": 850
-        },
-        {
-          "status": "이용불가",
-          "start": "14:10",
-          "end": "14:20",
-          "startMinute": 850,
-          "endMinute": 860
-        },
-        {
-          "status": "이용불가",
-          "start": "14:20",
-          "end": "14:30",
-          "startMinute": 860,
-          "endMinute": 870
-        },
-        {
-          "status": "이용불가",
-          "start": "14:30",
-          "end": "14:40",
-          "startMinute": 870,
-          "endMinute": 880
-        },
-        {
-          "status": "이용불가",
-          "start": "14:40",
-          "end": "14:50",
-          "startMinute": 880,
-          "endMinute": 890
-        },
-        {
-          "status": "이용중",
-          "start": "14:50",
-          "end": "15:00",
-          "startMinute": 890,
-          "endMinute": 900
-        },
-        {
-          "status": "예약중",
           "start": "15:00",
           "end": "15:10",
           "startMinute": 900,
           "endMinute": 910
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:10",
           "end": "15:20",
           "startMinute": 910,
           "endMinute": 920
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:20",
           "end": "15:30",
           "startMinute": 920,
           "endMinute": 930
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:30",
           "end": "15:40",
           "startMinute": 930,
           "endMinute": 940
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:40",
           "end": "15:50",
           "startMinute": 940,
           "endMinute": 950
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:50",
           "end": "16:00",
           "startMinute": 950,
           "endMinute": 960
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:00",
           "end": "16:10",
           "startMinute": 960,
           "endMinute": 970
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:10",
           "end": "16:20",
           "startMinute": 970,
           "endMinute": 980
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:20",
           "end": "16:30",
           "startMinute": 980,
           "endMinute": 990
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:30",
           "end": "16:40",
           "startMinute": 990,
           "endMinute": 1000
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:40",
           "end": "16:50",
           "startMinute": 1000,
           "endMinute": 1010
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:50",
           "end": "17:00",
           "startMinute": 1010,
           "endMinute": 1020
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:00",
           "end": "17:10",
           "startMinute": 1020,
           "endMinute": 1030
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:10",
           "end": "17:20",
           "startMinute": 1030,
           "endMinute": 1040
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:20",
           "end": "17:30",
           "startMinute": 1040,
           "endMinute": 1050
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:30",
           "end": "17:40",
           "startMinute": 1050,
           "endMinute": 1060
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:40",
           "end": "17:50",
           "startMinute": 1060,
           "endMinute": 1070
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:50",
           "end": "18:00",
           "startMinute": 1070,
@@ -561,17 +519,12 @@
       "blocks": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:50"
+          "start": "15:00",
+          "end": "16:00"
         },
         {
           "status": "이용중",
-          "start": "14:50",
-          "end": "15:00"
-        },
-        {
-          "status": "예약중",
-          "start": "15:00",
+          "start": "16:00",
           "end": "18:00"
         },
         {
@@ -615,171 +568,142 @@
         "desc": "팀플룸1",
         "attention": "-",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [],
+        "useSectionOptions": [
+          {
+            "value": "1",
+            "label": "학습"
+          },
+          {
+            "value": "2",
+            "label": "회의"
+          },
+          {
+            "value": "3",
+            "label": "수업"
+          }
+        ],
         "slots": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:10",
-            "startMinute": 840,
-            "endMinute": 850
-          },
-          {
-            "status": "이용불가",
-            "start": "14:10",
-            "end": "14:20",
-            "startMinute": 850,
-            "endMinute": 860
-          },
-          {
-            "status": "이용불가",
-            "start": "14:20",
-            "end": "14:30",
-            "startMinute": 860,
-            "endMinute": 870
-          },
-          {
-            "status": "이용불가",
-            "start": "14:30",
-            "end": "14:40",
-            "startMinute": 870,
-            "endMinute": 880
-          },
-          {
-            "status": "이용불가",
-            "start": "14:40",
-            "end": "14:50",
-            "startMinute": 880,
-            "endMinute": 890
-          },
-          {
-            "status": "이용중",
-            "start": "14:50",
-            "end": "15:00",
-            "startMinute": 890,
-            "endMinute": 900
-          },
-          {
-            "status": "예약중",
             "start": "15:00",
             "end": "15:10",
             "startMinute": 900,
             "endMinute": 910
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:10",
             "end": "15:20",
             "startMinute": 910,
             "endMinute": 920
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:20",
             "end": "15:30",
             "startMinute": 920,
             "endMinute": 930
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:30",
             "end": "15:40",
             "startMinute": 930,
             "endMinute": 940
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:40",
             "end": "15:50",
             "startMinute": 940,
             "endMinute": 950
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:50",
             "end": "16:00",
             "startMinute": 950,
             "endMinute": 960
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:00",
             "end": "16:10",
             "startMinute": 960,
             "endMinute": 970
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:10",
             "end": "16:20",
             "startMinute": 970,
             "endMinute": 980
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:20",
             "end": "16:30",
             "startMinute": 980,
             "endMinute": 990
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:30",
             "end": "16:40",
             "startMinute": 990,
             "endMinute": 1000
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:40",
             "end": "16:50",
             "startMinute": 1000,
             "endMinute": 1010
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:50",
             "end": "17:00",
             "startMinute": 1010,
             "endMinute": 1020
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:00",
             "end": "17:10",
             "startMinute": 1020,
             "endMinute": 1030
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:10",
             "end": "17:20",
             "startMinute": 1030,
             "endMinute": 1040
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:20",
             "end": "17:30",
             "startMinute": 1040,
             "endMinute": 1050
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:30",
             "end": "17:40",
             "startMinute": 1050,
             "endMinute": 1060
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:40",
             "end": "17:50",
             "startMinute": 1060,
             "endMinute": 1070
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:50",
             "end": "18:00",
             "startMinute": 1070,
@@ -1167,17 +1091,12 @@
         "blocks": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:50"
+            "start": "15:00",
+            "end": "16:00"
           },
           {
             "status": "이용중",
-            "start": "14:50",
-            "end": "15:00"
-          },
-          {
-            "status": "예약중",
-            "start": "15:00",
+            "start": "16:00",
             "end": "18:00"
           },
           {
@@ -1282,167 +1201,125 @@
       "slots": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:10",
-          "startMinute": 840,
-          "endMinute": 850
-        },
-        {
-          "status": "이용불가",
-          "start": "14:10",
-          "end": "14:20",
-          "startMinute": 850,
-          "endMinute": 860
-        },
-        {
-          "status": "이용불가",
-          "start": "14:20",
-          "end": "14:30",
-          "startMinute": 860,
-          "endMinute": 870
-        },
-        {
-          "status": "이용불가",
-          "start": "14:30",
-          "end": "14:40",
-          "startMinute": 870,
-          "endMinute": 880
-        },
-        {
-          "status": "이용불가",
-          "start": "14:40",
-          "end": "14:50",
-          "startMinute": 880,
-          "endMinute": 890
-        },
-        {
-          "status": "이용가능",
-          "start": "14:50",
-          "end": "15:00",
-          "startMinute": 890,
-          "endMinute": 900
-        },
-        {
-          "status": "예약중",
           "start": "15:00",
           "end": "15:10",
           "startMinute": 900,
           "endMinute": 910
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:10",
           "end": "15:20",
           "startMinute": 910,
           "endMinute": 920
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:20",
           "end": "15:30",
           "startMinute": 920,
           "endMinute": 930
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:30",
           "end": "15:40",
           "startMinute": 930,
           "endMinute": 940
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:40",
           "end": "15:50",
           "startMinute": 940,
           "endMinute": 950
         },
         {
-          "status": "예약중",
+          "status": "이용불가",
           "start": "15:50",
           "end": "16:00",
           "startMinute": 950,
           "endMinute": 960
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:00",
           "end": "16:10",
           "startMinute": 960,
           "endMinute": 970
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:10",
           "end": "16:20",
           "startMinute": 970,
           "endMinute": 980
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:20",
           "end": "16:30",
           "startMinute": 980,
           "endMinute": 990
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:30",
           "end": "16:40",
           "startMinute": 990,
           "endMinute": 1000
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:40",
           "end": "16:50",
           "startMinute": 1000,
           "endMinute": 1010
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "16:50",
           "end": "17:00",
           "startMinute": 1010,
           "endMinute": 1020
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:00",
           "end": "17:10",
           "startMinute": 1020,
           "endMinute": 1030
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:10",
           "end": "17:20",
           "startMinute": 1030,
           "endMinute": 1040
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:20",
           "end": "17:30",
           "startMinute": 1040,
           "endMinute": 1050
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:30",
           "end": "17:40",
           "startMinute": 1050,
           "endMinute": 1060
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:40",
           "end": "17:50",
           "startMinute": 1060,
           "endMinute": 1070
         },
         {
-          "status": "예약중",
+          "status": "이용중",
           "start": "17:50",
           "end": "18:00",
           "startMinute": 1070,
@@ -1830,17 +1707,12 @@
       "blocks": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:50"
-        },
-        {
-          "status": "이용가능",
-          "start": "14:50",
-          "end": "15:00"
-        },
-        {
-          "status": "예약중",
           "start": "15:00",
+          "end": "16:00"
+        },
+        {
+          "status": "이용중",
+          "start": "16:00",
           "end": "18:00"
         },
         {
@@ -1888,167 +1760,125 @@
         "slots": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:10",
-            "startMinute": 840,
-            "endMinute": 850
-          },
-          {
-            "status": "이용불가",
-            "start": "14:10",
-            "end": "14:20",
-            "startMinute": 850,
-            "endMinute": 860
-          },
-          {
-            "status": "이용불가",
-            "start": "14:20",
-            "end": "14:30",
-            "startMinute": 860,
-            "endMinute": 870
-          },
-          {
-            "status": "이용불가",
-            "start": "14:30",
-            "end": "14:40",
-            "startMinute": 870,
-            "endMinute": 880
-          },
-          {
-            "status": "이용불가",
-            "start": "14:40",
-            "end": "14:50",
-            "startMinute": 880,
-            "endMinute": 890
-          },
-          {
-            "status": "이용가능",
-            "start": "14:50",
-            "end": "15:00",
-            "startMinute": 890,
-            "endMinute": 900
-          },
-          {
-            "status": "예약중",
             "start": "15:00",
             "end": "15:10",
             "startMinute": 900,
             "endMinute": 910
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:10",
             "end": "15:20",
             "startMinute": 910,
             "endMinute": 920
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:20",
             "end": "15:30",
             "startMinute": 920,
             "endMinute": 930
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:30",
             "end": "15:40",
             "startMinute": 930,
             "endMinute": 940
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:40",
             "end": "15:50",
             "startMinute": 940,
             "endMinute": 950
           },
           {
-            "status": "예약중",
+            "status": "이용불가",
             "start": "15:50",
             "end": "16:00",
             "startMinute": 950,
             "endMinute": 960
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:00",
             "end": "16:10",
             "startMinute": 960,
             "endMinute": 970
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:10",
             "end": "16:20",
             "startMinute": 970,
             "endMinute": 980
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:20",
             "end": "16:30",
             "startMinute": 980,
             "endMinute": 990
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:30",
             "end": "16:40",
             "startMinute": 990,
             "endMinute": 1000
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:40",
             "end": "16:50",
             "startMinute": 1000,
             "endMinute": 1010
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "16:50",
             "end": "17:00",
             "startMinute": 1010,
             "endMinute": 1020
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:00",
             "end": "17:10",
             "startMinute": 1020,
             "endMinute": 1030
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:10",
             "end": "17:20",
             "startMinute": 1030,
             "endMinute": 1040
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:20",
             "end": "17:30",
             "startMinute": 1040,
             "endMinute": 1050
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:30",
             "end": "17:40",
             "startMinute": 1050,
             "endMinute": 1060
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:40",
             "end": "17:50",
             "startMinute": 1060,
             "endMinute": 1070
           },
           {
-            "status": "예약중",
+            "status": "이용중",
             "start": "17:50",
             "end": "18:00",
             "startMinute": 1070,
@@ -2436,17 +2266,12 @@
         "blocks": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:50"
-          },
-          {
-            "status": "이용가능",
-            "start": "14:50",
-            "end": "15:00"
-          },
-          {
-            "status": "예약중",
             "start": "15:00",
+            "end": "16:00"
+          },
+          {
+            "status": "이용중",
+            "start": "16:00",
             "end": "18:00"
           },
           {
@@ -2553,83 +2378,41 @@
       "slots": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:10",
-          "startMinute": 840,
-          "endMinute": 850
-        },
-        {
-          "status": "이용불가",
-          "start": "14:10",
-          "end": "14:20",
-          "startMinute": 850,
-          "endMinute": 860
-        },
-        {
-          "status": "이용불가",
-          "start": "14:20",
-          "end": "14:30",
-          "startMinute": 860,
-          "endMinute": 870
-        },
-        {
-          "status": "이용불가",
-          "start": "14:30",
-          "end": "14:40",
-          "startMinute": 870,
-          "endMinute": 880
-        },
-        {
-          "status": "이용불가",
-          "start": "14:40",
-          "end": "14:50",
-          "startMinute": 880,
-          "endMinute": 890
-        },
-        {
-          "status": "이용중",
-          "start": "14:50",
-          "end": "15:00",
-          "startMinute": 890,
-          "endMinute": 900
-        },
-        {
-          "status": "이용중",
           "start": "15:00",
           "end": "15:10",
           "startMinute": 900,
           "endMinute": 910
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:10",
           "end": "15:20",
           "startMinute": 910,
           "endMinute": 920
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:20",
           "end": "15:30",
           "startMinute": 920,
           "endMinute": 930
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:30",
           "end": "15:40",
           "startMinute": 930,
           "endMinute": 940
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:40",
           "end": "15:50",
           "startMinute": 940,
           "endMinute": 950
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:50",
           "end": "16:00",
           "startMinute": 950,
@@ -2678,42 +2461,42 @@
           "endMinute": 1020
         },
         {
-          "status": "이용가능",
+          "status": "예약중",
           "start": "17:00",
           "end": "17:10",
           "startMinute": 1020,
           "endMinute": 1030
         },
         {
-          "status": "이용가능",
+          "status": "예약중",
           "start": "17:10",
           "end": "17:20",
           "startMinute": 1030,
           "endMinute": 1040
         },
         {
-          "status": "이용가능",
+          "status": "예약중",
           "start": "17:20",
           "end": "17:30",
           "startMinute": 1040,
           "endMinute": 1050
         },
         {
-          "status": "이용가능",
+          "status": "예약중",
           "start": "17:30",
           "end": "17:40",
           "startMinute": 1050,
           "endMinute": 1060
         },
         {
-          "status": "이용가능",
+          "status": "예약중",
           "start": "17:40",
           "end": "17:50",
           "startMinute": 1060,
           "endMinute": 1070
         },
         {
-          "status": "이용가능",
+          "status": "예약중",
           "start": "17:50",
           "end": "18:00",
           "startMinute": 1070,
@@ -3101,22 +2884,17 @@
       "blocks": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:50"
+          "start": "15:00",
+          "end": "16:00"
         },
         {
           "status": "이용중",
-          "start": "14:50",
+          "start": "16:00",
           "end": "17:00"
         },
         {
-          "status": "이용가능",
-          "start": "17:00",
-          "end": "18:00"
-        },
-        {
           "status": "예약중",
-          "start": "18:00",
+          "start": "17:00",
           "end": "22:00"
         },
         {
@@ -3154,83 +2932,41 @@
         "slots": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:10",
-            "startMinute": 840,
-            "endMinute": 850
-          },
-          {
-            "status": "이용불가",
-            "start": "14:10",
-            "end": "14:20",
-            "startMinute": 850,
-            "endMinute": 860
-          },
-          {
-            "status": "이용불가",
-            "start": "14:20",
-            "end": "14:30",
-            "startMinute": 860,
-            "endMinute": 870
-          },
-          {
-            "status": "이용불가",
-            "start": "14:30",
-            "end": "14:40",
-            "startMinute": 870,
-            "endMinute": 880
-          },
-          {
-            "status": "이용불가",
-            "start": "14:40",
-            "end": "14:50",
-            "startMinute": 880,
-            "endMinute": 890
-          },
-          {
-            "status": "이용중",
-            "start": "14:50",
-            "end": "15:00",
-            "startMinute": 890,
-            "endMinute": 900
-          },
-          {
-            "status": "이용중",
             "start": "15:00",
             "end": "15:10",
             "startMinute": 900,
             "endMinute": 910
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:10",
             "end": "15:20",
             "startMinute": 910,
             "endMinute": 920
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:20",
             "end": "15:30",
             "startMinute": 920,
             "endMinute": 930
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:30",
             "end": "15:40",
             "startMinute": 930,
             "endMinute": 940
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:40",
             "end": "15:50",
             "startMinute": 940,
             "endMinute": 950
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:50",
             "end": "16:00",
             "startMinute": 950,
@@ -3279,42 +3015,42 @@
             "endMinute": 1020
           },
           {
-            "status": "이용가능",
+            "status": "예약중",
             "start": "17:00",
             "end": "17:10",
             "startMinute": 1020,
             "endMinute": 1030
           },
           {
-            "status": "이용가능",
+            "status": "예약중",
             "start": "17:10",
             "end": "17:20",
             "startMinute": 1030,
             "endMinute": 1040
           },
           {
-            "status": "이용가능",
+            "status": "예약중",
             "start": "17:20",
             "end": "17:30",
             "startMinute": 1040,
             "endMinute": 1050
           },
           {
-            "status": "이용가능",
+            "status": "예약중",
             "start": "17:30",
             "end": "17:40",
             "startMinute": 1050,
             "endMinute": 1060
           },
           {
-            "status": "이용가능",
+            "status": "예약중",
             "start": "17:40",
             "end": "17:50",
             "startMinute": 1060,
             "endMinute": 1070
           },
           {
-            "status": "이용가능",
+            "status": "예약중",
             "start": "17:50",
             "end": "18:00",
             "startMinute": 1070,
@@ -3702,22 +3438,17 @@
         "blocks": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:50"
+            "start": "15:00",
+            "end": "16:00"
           },
           {
             "status": "이용중",
-            "start": "14:50",
+            "start": "16:00",
             "end": "17:00"
           },
           {
-            "status": "이용가능",
-            "start": "17:00",
-            "end": "18:00"
-          },
-          {
             "status": "예약중",
-            "start": "18:00",
+            "start": "17:00",
             "end": "22:00"
           },
           {
@@ -3767,16 +3498,6 @@
         ],
         "startEndMap": [
           {
-            "start": "17:00",
-            "startValue": "17:00",
-            "ends": [
-              "18:00"
-            ],
-            "endValues": [
-              "18:00"
-            ]
-          },
-          {
             "start": "22:00",
             "startValue": "22:00",
             "ends": [
@@ -3795,10 +3516,6 @@
         ],
         "reservableWindows": [
           {
-            "start": "17:00",
-            "end": "18:00"
-          },
-          {
             "start": "22:00",
             "end": "23:00"
           }
@@ -3812,83 +3529,41 @@
       "slots": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:10",
-          "startMinute": 840,
-          "endMinute": 850
-        },
-        {
-          "status": "이용불가",
-          "start": "14:10",
-          "end": "14:20",
-          "startMinute": 850,
-          "endMinute": 860
-        },
-        {
-          "status": "이용불가",
-          "start": "14:20",
-          "end": "14:30",
-          "startMinute": 860,
-          "endMinute": 870
-        },
-        {
-          "status": "이용불가",
-          "start": "14:30",
-          "end": "14:40",
-          "startMinute": 870,
-          "endMinute": 880
-        },
-        {
-          "status": "이용불가",
-          "start": "14:40",
-          "end": "14:50",
-          "startMinute": 880,
-          "endMinute": 890
-        },
-        {
-          "status": "이용중",
-          "start": "14:50",
-          "end": "15:00",
-          "startMinute": 890,
-          "endMinute": 900
-        },
-        {
-          "status": "이용중",
           "start": "15:00",
           "end": "15:10",
           "startMinute": 900,
           "endMinute": 910
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:10",
           "end": "15:20",
           "startMinute": 910,
           "endMinute": 920
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:20",
           "end": "15:30",
           "startMinute": 920,
           "endMinute": 930
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:30",
           "end": "15:40",
           "startMinute": 930,
           "endMinute": 940
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:40",
           "end": "15:50",
           "startMinute": 940,
           "endMinute": 950
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:50",
           "end": "16:00",
           "startMinute": 950,
@@ -4360,12 +4035,7 @@
       "blocks": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:50"
-        },
-        {
-          "status": "이용중",
-          "start": "14:50",
+          "start": "15:00",
           "end": "16:00"
         },
         {
@@ -4414,87 +4084,58 @@
         "desc": "팀플룸4",
         "attention": "-",
         "companionHint": "수용인원 5 ~ 9명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [],
+        "useSectionOptions": [
+          {
+            "value": "1",
+            "label": "학습"
+          },
+          {
+            "value": "2",
+            "label": "회의"
+          },
+          {
+            "value": "3",
+            "label": "수업"
+          }
+        ],
         "slots": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:10",
-            "startMinute": 840,
-            "endMinute": 850
-          },
-          {
-            "status": "이용불가",
-            "start": "14:10",
-            "end": "14:20",
-            "startMinute": 850,
-            "endMinute": 860
-          },
-          {
-            "status": "이용불가",
-            "start": "14:20",
-            "end": "14:30",
-            "startMinute": 860,
-            "endMinute": 870
-          },
-          {
-            "status": "이용불가",
-            "start": "14:30",
-            "end": "14:40",
-            "startMinute": 870,
-            "endMinute": 880
-          },
-          {
-            "status": "이용불가",
-            "start": "14:40",
-            "end": "14:50",
-            "startMinute": 880,
-            "endMinute": 890
-          },
-          {
-            "status": "이용중",
-            "start": "14:50",
-            "end": "15:00",
-            "startMinute": 890,
-            "endMinute": 900
-          },
-          {
-            "status": "이용중",
             "start": "15:00",
             "end": "15:10",
             "startMinute": 900,
             "endMinute": 910
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:10",
             "end": "15:20",
             "startMinute": 910,
             "endMinute": 920
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:20",
             "end": "15:30",
             "startMinute": 920,
             "endMinute": 930
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:30",
             "end": "15:40",
             "startMinute": 930,
             "endMinute": 940
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:40",
             "end": "15:50",
             "startMinute": 940,
             "endMinute": 950
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:50",
             "end": "16:00",
             "startMinute": 950,
@@ -4966,12 +4607,7 @@
         "blocks": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:50"
-          },
-          {
-            "status": "이용중",
-            "start": "14:50",
+            "start": "15:00",
             "end": "16:00"
           },
           {
@@ -5081,83 +4717,41 @@
       "slots": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:10",
-          "startMinute": 840,
-          "endMinute": 850
-        },
-        {
-          "status": "이용불가",
-          "start": "14:10",
-          "end": "14:20",
-          "startMinute": 850,
-          "endMinute": 860
-        },
-        {
-          "status": "이용불가",
-          "start": "14:20",
-          "end": "14:30",
-          "startMinute": 860,
-          "endMinute": 870
-        },
-        {
-          "status": "이용불가",
-          "start": "14:30",
-          "end": "14:40",
-          "startMinute": 870,
-          "endMinute": 880
-        },
-        {
-          "status": "이용불가",
-          "start": "14:40",
-          "end": "14:50",
-          "startMinute": 880,
-          "endMinute": 890
-        },
-        {
-          "status": "이용중",
-          "start": "14:50",
-          "end": "15:00",
-          "startMinute": 890,
-          "endMinute": 900
-        },
-        {
-          "status": "이용중",
           "start": "15:00",
           "end": "15:10",
           "startMinute": 900,
           "endMinute": 910
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:10",
           "end": "15:20",
           "startMinute": 910,
           "endMinute": 920
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:20",
           "end": "15:30",
           "startMinute": 920,
           "endMinute": 930
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:30",
           "end": "15:40",
           "startMinute": 930,
           "endMinute": 940
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:40",
           "end": "15:50",
           "startMinute": 940,
           "endMinute": 950
         },
         {
-          "status": "이용중",
+          "status": "이용불가",
           "start": "15:50",
           "end": "16:00",
           "startMinute": 950,
@@ -5629,12 +5223,7 @@
       "blocks": [
         {
           "status": "이용불가",
-          "start": "14:00",
-          "end": "14:50"
-        },
-        {
-          "status": "이용중",
-          "start": "14:50",
+          "start": "15:00",
           "end": "16:00"
         },
         {
@@ -5690,83 +5279,41 @@
         "slots": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:10",
-            "startMinute": 840,
-            "endMinute": 850
-          },
-          {
-            "status": "이용불가",
-            "start": "14:10",
-            "end": "14:20",
-            "startMinute": 850,
-            "endMinute": 860
-          },
-          {
-            "status": "이용불가",
-            "start": "14:20",
-            "end": "14:30",
-            "startMinute": 860,
-            "endMinute": 870
-          },
-          {
-            "status": "이용불가",
-            "start": "14:30",
-            "end": "14:40",
-            "startMinute": 870,
-            "endMinute": 880
-          },
-          {
-            "status": "이용불가",
-            "start": "14:40",
-            "end": "14:50",
-            "startMinute": 880,
-            "endMinute": 890
-          },
-          {
-            "status": "이용중",
-            "start": "14:50",
-            "end": "15:00",
-            "startMinute": 890,
-            "endMinute": 900
-          },
-          {
-            "status": "이용중",
             "start": "15:00",
             "end": "15:10",
             "startMinute": 900,
             "endMinute": 910
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:10",
             "end": "15:20",
             "startMinute": 910,
             "endMinute": 920
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:20",
             "end": "15:30",
             "startMinute": 920,
             "endMinute": 930
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:30",
             "end": "15:40",
             "startMinute": 930,
             "endMinute": 940
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:40",
             "end": "15:50",
             "startMinute": 940,
             "endMinute": 950
           },
           {
-            "status": "이용중",
+            "status": "이용불가",
             "start": "15:50",
             "end": "16:00",
             "startMinute": 950,
@@ -6238,12 +5785,7 @@
         "blocks": [
           {
             "status": "이용불가",
-            "start": "14:00",
-            "end": "14:50"
-          },
-          {
-            "status": "이용중",
-            "start": "14:50",
+            "start": "15:00",
             "end": "16:00"
           },
           {

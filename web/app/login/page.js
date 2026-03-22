@@ -33,6 +33,54 @@ export default function LoginPage() {
     return !isRunning && loginId.trim() && loginPassword;
   }, [isRunning, loginId, loginPassword]);
 
+  const isLocalhost = useMemo(() => {
+    try {
+      if (typeof window === "undefined") return false;
+      return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  function readStoredCreds() {
+    try {
+      const id = (sessionStorage.getItem("cau_login_id") || localStorage.getItem("cau_login_id") || "").trim();
+      const password = sessionStorage.getItem("cau_login_password") || localStorage.getItem("cau_login_password") || "";
+      return { id, password };
+    } catch (e) {
+      return { id: "", password: "" };
+    }
+  }
+
+  function storeCreds(id, password) {
+    try {
+      sessionStorage.setItem("cau_login_id", id);
+      sessionStorage.setItem("cau_login_password", password);
+      localStorage.setItem("cau_login_id", id);
+      localStorage.setItem("cau_login_password", password);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  async function runWithPromptedCreds() {
+    let { id, password } = readStoredCreds();
+
+    if (!id || !password) {
+      id = (prompt("포탈 ID를 입력하세요 (로컬 저장)") || "").trim();
+      password = prompt("비밀번호를 입력하세요 (로컬 저장)") || "";
+      if (!id || !password) {
+        alert("ID/비밀번호가 필요합니다.");
+        return;
+      }
+      storeCreds(id, password);
+    }
+
+    setLoginId(id);
+    setLoginPassword(password);
+    await runAndWaitWithCreds(id, password);
+  }
+
   async function pollUntilLoginStep() {
     const maxMs = 120_000;
     const started = Date.now();
@@ -81,11 +129,11 @@ export default function LoginPage() {
     throw new Error("완료 대기 시간 초과");
   }
 
-  async function runAndWait() {
-    const id = loginId.trim();
-    const password = loginPassword;
+  async function runAndWaitWithCreds(id, password) {
+    const safeId = String(id || "").trim();
+    const safePassword = String(password || "");
 
-    if (!id || !password) {
+    if (!safeId || !safePassword) {
       alert("아이디와 비밀번호를 입력해주세요.");
       return;
     }
@@ -99,7 +147,7 @@ export default function LoginPage() {
       const resp = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, password, dateValue: todayKstDateValue() })
+        body: JSON.stringify({ id: safeId, password: safePassword, dateValue: todayKstDateValue() })
       });
 
       const j = await resp.json().catch(() => ({}));
@@ -109,8 +157,8 @@ export default function LoginPage() {
 
       await pollUntilLoginStep();
 
-      sessionStorage.setItem("cau_login_id", id);
-      sessionStorage.setItem("cau_login_password", password);
+      sessionStorage.setItem("cau_login_id", safeId);
+      sessionStorage.setItem("cau_login_password", safePassword);
       sessionStorage.setItem("cau_logged_in", "true");
 
       try {
@@ -128,6 +176,10 @@ export default function LoginPage() {
         document.body.classList.remove("logging-in");
       }
     }
+  }
+
+  async function runAndWait() {
+    await runAndWaitWithCreds(loginId.trim(), loginPassword);
   }
 
   return (
@@ -149,6 +201,7 @@ export default function LoginPage() {
 
         <form
           className="form-area"
+          style={{ display: "none" }}
           onSubmit={(e) => {
             e.preventDefault();
             if (canSubmit) {
@@ -170,6 +223,23 @@ export default function LoginPage() {
             <span className="button-text">로그인</span>
           </button>
         </form>
+
+        {!isRunning ? (
+          <button
+            type="button"
+            className="login-button"
+            disabled={isRunning}
+            onClick={() => {
+              if (!isLocalhost) {
+                alert("테스트 로그인 버튼은 로컬에서만 사용할 수 있습니다.");
+                return;
+              }
+              runWithPromptedCreds();
+            }}
+          >
+            <span className="button-text">테스트 로그인</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );

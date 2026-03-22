@@ -6,6 +6,96 @@ function debugLog(...args) {
   console.log("[DEBUG]", ...args);
 }
 
+const TRACE_WAIT = String(process.env.TRACE_WAIT || "1") !== "0";
+
+function waitStamp() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${hh}:${mi}:${ss}.${ms}`;
+}
+
+async function waitTrace(label, fn, { intervalMs, timeoutMs, snapshot } = {}) {
+  const startedAt = Date.now();
+  const interval = Number(intervalMs) || 500;
+  const timeout = Number(timeoutMs) || 0;
+  let tick = 0;
+
+  if (TRACE_WAIT) {
+    console.log(`[WAIT] ${waitStamp()} START ${label}`);
+  }
+
+  const timer = setInterval(async () => {
+    tick += 1;
+    if (!TRACE_WAIT) return;
+    const elapsed = Date.now() - startedAt;
+    let snapText = "";
+    if (typeof snapshot === "function") {
+      try {
+        const snap = await snapshot();
+        snapText = snap ? ` | ${snap}` : "";
+      } catch (e) {
+        snapText = ` | snapshot-error=${String(e && e.message ? e.message : e)}`;
+      }
+    }
+    console.log(`[WAIT] ${waitStamp()} ... ${label} tick=${tick} elapsed=${elapsed}ms${snapText}`);
+  }, interval);
+
+  try {
+    if (!timeout) {
+      const result = await fn();
+      if (TRACE_WAIT) {
+        const elapsed = Date.now() - startedAt;
+        console.log(`[WAIT] ${waitStamp()} END ${label} (${elapsed}ms)`);
+      }
+      return result;
+    }
+
+    const result = await Promise.race([
+      fn(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`timeout ${timeout}ms`)), timeout)
+      )
+    ]);
+    if (TRACE_WAIT) {
+      const elapsed = Date.now() - startedAt;
+      console.log(`[WAIT] ${waitStamp()} END ${label} (${elapsed}ms)`);
+    }
+    return result;
+  } catch (err) {
+    if (TRACE_WAIT) {
+      const elapsed = Date.now() - startedAt;
+      let snapText = "";
+      if (typeof snapshot === "function") {
+        try {
+          const snap = await snapshot();
+          snapText = snap ? ` | ${snap}` : "";
+        } catch (e) {
+          snapText = ` | snapshot-error=${String(e && e.message ? e.message : e)}`;
+        }
+      }
+      console.log(
+        `[WAIT] ${waitStamp()} FAIL ${label} (${elapsed}ms) error=${String(err && err.message ? err.message : err)}${snapText}`
+      );
+    }
+    throw err;
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+async function loginSnapshot(page) {
+  const url = String(page.url() || "");
+  const pwCount = await page.locator('input[type="password"]').count().catch(() => 0);
+  const loginMarkerCount = await page
+    .locator('text=중앙대학교 통합 LOGIN')
+    .count()
+    .catch(() => 0);
+  return `url=${url} pwInputs=${pwCount} loginMarker=${loginMarkerCount}`;
+}
+
 const BASE_URL = "https://library.cau.ac.kr";
 const LOGIN_URL = `${BASE_URL}/login?returnUrl=%2F&queryParamsHandling=merge`;
 const TEAM_URL = `${BASE_URL}/library-services/room/team-rooms?tabIndex=2`;
@@ -210,11 +300,26 @@ function buildMarkdown(data) {
 
 async function detectLoggedIn(page) {
   const currentUrl = String(page.url() || "");
-  if (currentUrl && !currentUrl.includes("/login")) {
+
+  const isLoginUrl = currentUrl.includes("/login");
+
+  // Strong marker: header login button shows "... 님" when authenticated.
+  const headerName = await page
+    .locator(".btn-login")
+    .first()
+    .innerText()
+    .then((t) => String(t || "").replace(/\s+/g, " ").trim())
+    .catch(() => "");
+  if (headerName && /\S+\s+님$/.test(headerName)) {
     return true;
   }
 
-  // 로그인 페이지라면 입력 폼이 보이는지로 판정(텍스트 전체 innerText는 매우 느릴 수 있음)
+  // If we're on /login, assume NOT logged in unless strong marker exists.
+  if (isLoginUrl) {
+    return false;
+  }
+
+  // Non-/login pages: if password input exists, we are not logged in.
   const hasPassword = await page
     .locator('input[type="password"]')
     .count()
@@ -224,13 +329,23 @@ async function detectLoggedIn(page) {
     return false;
   }
 
-  // fallback: title 기반(가벼움)
-  const title = await page.title().catch(() => "");
-  if (title && !String(title).includes("로그인")) {
-    return true;
+  // Non-/login pages: login screen marker present -> not logged in.
+  const hasLoginMarker = await page
+    .locator('text=중앙대학교 통합 LOGIN')
+    .count()
+    .then((n) => n > 0)
+    .catch(() => false);
+  if (hasLoginMarker) {
+    return false;
   }
 
-  return false;
+  // Last lightweight fallback: title hint (but never used for /login)
+  const title = await page.title().catch(() => "");
+  if (title && String(title).includes("LOGIN")) {
+    return false;
+  }
+
+  return Boolean(currentUrl);
 }
 
 async function debugVisibleInputs(page) {
@@ -259,20 +374,52 @@ async function debugVisibleInputs(page) {
 }
 
 async function doLogin(page, loginId, password) {
-  await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("domcontentloaded").catch(() => {});
-  await sleep(400);
+  await waitTrace(
+    "doLogin: goto LOGIN_URL domcontentloaded",
+    async () => {
+      await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    },
+    { timeoutMs: 20000, snapshot: () => loginSnapshot(page) }
+  );
 
-  if (await detectLoggedIn(page)) return;
+  // If already logged in, skip immediately.
+  if (await waitTrace("doLogin: detectLoggedIn(pre)", () => detectLoggedIn(page), { timeoutMs: 5000, snapshot: () => loginSnapshot(page) })) {
+    debugLog("doLogin: already logged in, skip");
+    return;
+  }
+
+  // Wait for login inputs to be interactable (avoid fixed sleep)
+  await waitTrace(
+    "doLogin: wait first input visible",
+    async () => {
+      await page.locator("input").first().waitFor({ state: "visible", timeout: 15000 });
+    },
+    { timeoutMs: 16000, snapshot: () => loginSnapshot(page) }
+  );
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
   if (!bodyText.includes("중앙대학교 통합 LOGIN")) {
     throw new Error("로그인 페이지에서 통합 LOGIN 영역을 찾지 못했습니다.");
   }
 
-  await page.waitForFunction(() => {
-    return document.querySelectorAll("input").length >= 2;
-  }, { timeout: 15000 });
+  await waitTrace(
+    "doLogin: wait input count>=2",
+    async () => {
+      await page.waitForFunction(() => {
+        return document.querySelectorAll("input").length >= 2;
+      }, { timeout: 15000 });
+    },
+    {
+      timeoutMs: 16000,
+      snapshot: async () => {
+        const url = String(page.url() || "");
+        const inputCount = await page.locator("input").count().catch(() => 0);
+        const pwCount = await page.locator('input[type="password"]').count().catch(() => 0);
+        return `url=${url} inputs=${inputCount} pwInputs=${pwCount}`;
+      }
+    }
+  );
 
   const inputsDebug = await debugVisibleInputs(page);
 
@@ -360,34 +507,86 @@ async function doLogin(page, loginId, password) {
     throw new Error("로그인 버튼 클릭에 실패했습니다.");
   }
 
-  await Promise.allSettled([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }),
-    page.waitForLoadState("domcontentloaded")
-  ]);
+  await waitTrace(
+    "doLogin: click login -> navigation domcontentloaded",
+    async () => {
+      await Promise.allSettled([
+        page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }),
+        page.waitForLoadState("domcontentloaded")
+      ]);
+    },
+    { timeoutMs: 16000, snapshot: () => loginSnapshot(page) }
+  );
 
-  await sleep(400);
+  // Wait until we are no longer on login page (dynamic)
+  await waitTrace(
+    "doLogin: wait leave /login and no LOGIN marker",
+    async () => {
+      await page
+        .waitForFunction(() => {
+          const url = String(location.href || "");
+          const body = document.body ? String(document.body.innerText || "") : "";
+          if (url.includes("/login")) return false;
+          if (body.includes("중앙대학교 통합 LOGIN")) return false;
+          return true;
+        }, { timeout: 20000 })
+        .catch(() => {});
+    },
+    { timeoutMs: 21000, snapshot: () => loginSnapshot(page) }
+  );
 
-  if (!(await detectLoggedIn(page))) {
+  const loggedInPost = await waitTrace("doLogin: detectLoggedIn(post)", () => detectLoggedIn(page), { timeoutMs: 5000, snapshot: () => loginSnapshot(page) });
+  if (!loggedInPost) {
     throw new Error(`로그인 후에도 로그인 상태가 아닙니다. 현재 URL=${page.url()}`);
   }
 }
 
 async function waitForTeamList(page) {
+  const snap = async () => {
+    const url = String(page.url() || "");
+    const dateCount = await page.locator("#reservableDate").count().catch(() => 0);
+    const cards = await page.locator(".ikc-card-rooms").count().catch(() => 0);
+    return `url=${url} #reservableDate=${dateCount} .ikc-card-rooms=${cards}`;
+  };
+
   try {
-    await page.goto(TEAM_URL, { waitUntil: "commit", timeout: 8000 });
+    await waitTrace(
+      "waitForTeamList: goto TEAM_URL commit",
+      async () => {
+        await page.goto(TEAM_URL, { waitUntil: "commit", timeout: 8000 });
+      },
+      { timeoutMs: 9000, snapshot: snap }
+    );
   } catch (err) {
     // Sometimes goto hangs after login; force redirect.
-    await page.evaluate((u) => {
-      location.href = u;
-    }, TEAM_URL).catch(() => {});
-    await page.waitForURL((u) => String(u).includes("/library-services/room/team-rooms"), { timeout: 15000 }).catch(() => {});
+    await waitTrace(
+      "waitForTeamList: goto failed -> location.href TEAM_URL",
+      async () => {
+        await page.evaluate((u) => {
+          location.href = u;
+        }, TEAM_URL).catch(() => {});
+        await page
+          .waitForURL((u) => String(u).includes("/library-services/room/team-rooms"), { timeout: 15000 })
+          .catch(() => {});
+      },
+      { timeoutMs: 16000, snapshot: snap }
+    );
   }
 
-  await page.waitForSelector(".ikc-card-rooms", { timeout: 20000 });
+  // Team rooms list cards may not render until the date is queried.
+  // Here we only wait for the page shell (date selector) to become available.
+  await waitTrace(
+    "waitForTeamList: wait #reservableDate",
+    async () => {
+      await page.waitForSelector("#reservableDate", { timeout: 15000 });
+    },
+    { timeoutMs: 16000, snapshot: snap }
+  );
 }
 
-async function selectTodayIfNeeded(page) {
-  const result = await page.evaluate(() => {
+async function selectDateIfNeeded(page, targetDateValue) {
+  const wanted = targetDateValue != null ? String(targetDateValue).trim() : "";
+  const result = await page.evaluate((wantedValue) => {
     const dateSelect = document.querySelector("#reservableDate");
     if (!dateSelect) {
       return { found: false, selectedValue: null, selectedLabel: null };
@@ -399,7 +598,10 @@ async function selectTodayIfNeeded(page) {
     }));
 
     const todayValue = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-    const selected = options.find((o) => o.value === todayValue) || options[0] || null;
+    const preferred = wantedValue
+      ? (options.find((o) => String(o.value || "") === wantedValue) || null)
+      : null;
+    const selected = preferred || options.find((o) => o.value === todayValue) || options[0] || null;
 
     if (selected) {
       dateSelect.value = selected.value;
@@ -411,15 +613,61 @@ async function selectTodayIfNeeded(page) {
       selectedValue: selected ? selected.value : null,
       selectedLabel: selected ? selected.label : null
     };
-  });
+  }, wanted);
 
   if (result.found) {
-    await sleep(120);
     const submitBtn = page.locator('button:has-text("조회")').first();
     if (await submitBtn.count().catch(() => 0)) {
-      await submitBtn.click().catch(() => {});
-      await page.waitForSelector(".ikc-card-rooms", { timeout: 15000 }).catch(() => {});
-      await sleep(120);
+      const snap = async () => {
+        const url = String(page.url() || "");
+        const disabled = await submitBtn.isDisabled().catch(() => null);
+        const cards = await page.locator(".ikc-card-rooms").count().catch(() => 0);
+        return `url=${url} 조회.disabled=${String(disabled)} cards=${cards}`;
+      };
+
+      await waitTrace(
+        "selectTodayIfNeeded: wait 조회 visible",
+        async () => {
+          await submitBtn.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+        },
+        { timeoutMs: 16000, snapshot: snap }
+      );
+
+      await waitTrace(
+        "selectTodayIfNeeded: wait 조회 enabled",
+        async () => {
+          await page
+            .waitForFunction(
+              (el) => el && !el.disabled,
+              { timeout: 15000 },
+              await submitBtn.elementHandle().catch(() => null)
+            )
+            .catch(() => {});
+        },
+        { timeoutMs: 16000, snapshot: snap }
+      );
+
+      await waitTrace(
+        "selectTodayIfNeeded: click 조회",
+        async () => {
+          await submitBtn.click().catch(() => {});
+        },
+        { timeoutMs: 5000, snapshot: snap }
+      );
+
+      // Wait until at least one card is rendered after query.
+      await waitTrace(
+        "selectTodayIfNeeded: wait cards render (.ikc-card-rooms>=1)",
+        async () => {
+          await page
+            .waitForFunction(() => {
+              const cards = document.querySelectorAll(".ikc-card-rooms");
+              return cards && cards.length > 0;
+            }, { timeout: 20000 })
+            .catch(() => {});
+        },
+        { timeoutMs: 21000, snapshot: snap }
+      );
     }
   }
 
@@ -683,20 +931,41 @@ async function runTeamTodayScraper(options) {
   ensureDir(path.dirname(finalJsonPath));
   ensureDir(path.dirname(finalMdPath));
 
-  const browser = injectedPage ? null : await chromium.launch({ headless });
+  const browser = injectedPage
+    ? null
+    : await waitTrace(
+        `chromium.launch headless=${String(headless)}`,
+        async () => {
+          return await chromium.launch({ headless });
+        },
+        { timeoutMs: 30000 }
+      );
   const context = injectedPage
     ? injectedPage.context()
-    : await browser.newContext({
-        viewport: { width: 1440, height: 1200 }
-      });
+    : await waitTrace(
+        "browser.newContext(viewport 1440x1200)",
+        async () => {
+          return await browser.newContext({
+            viewport: { width: 1440, height: 1200 }
+          });
+        },
+        { timeoutMs: 15000 }
+      );
 
-  const page = injectedPage ? injectedPage : await context.newPage();
+  const page = injectedPage
+    ? injectedPage
+    : await waitTrace(
+        "context.newPage()",
+        async () => {
+          return await context.newPage();
+        },
+        { timeoutMs: 15000 }
+      );
 
   function writeLive(output) {
     fs.writeFileSync(liveJsonPath, JSON.stringify(output, null, 2), "utf8");
     debugLog("LIVE:", output.currentStep, "| rooms:", output.rooms?.length);
   }
-  await doLogin(page, credentials.loginId, credentials.password);
   try {
     console.log("\n==================================================");
     console.log("CAU TEAM ROOM TODAY SCRAPER");
@@ -716,7 +985,15 @@ async function runTeamTodayScraper(options) {
     writeLive(liveBase);
 
     console.log("[1] 로그인 중...");
- 
+
+    await waitTrace(
+      "doLogin(full)",
+      async () => {
+        await doLogin(page, credentials.loginId, credentials.password);
+      },
+      { timeoutMs: 60000, intervalMs: 500, snapshot: () => loginSnapshot(page) }
+    );
+
     debugLog("로그인 완료, 현재 URL:", page.url());
     console.log("[완료] 로그인 성공");
 
@@ -728,9 +1005,11 @@ async function runTeamTodayScraper(options) {
         const userElement = document.querySelector(".btn-login");
         if (userElement) {
           const text = userElement.textContent || userElement.innerText || "";
-          // "이민제 님" → "이민제" 추출
-          const match = text.match(/^(\S+)\s+님$/);
-          return match ? match[1] : text.replace(/\s+님$/, "").trim();
+          // "이민제 님" → "이민제" 추출 ("로그인" 버튼 텍스트 등은 무시)
+          const normalized = String(text).replace(/\s+/g, " ").trim();
+          const match = normalized.match(/^(\S+)\s+님$/);
+          if (!match) return null;
+          return match[1] || null;
         }
         return null;
       });
@@ -752,7 +1031,7 @@ async function runTeamTodayScraper(options) {
     console.log("[2] 팀플룸 페이지 진입 중...");
     await waitForTeamList(page);
     debugLog("팀플룸 페이지 로딩 완료1");
-    const selectedDate = await selectTodayIfNeeded(page);
+    const selectedDate = await selectDateIfNeeded(page, opts.targetDateValue);
     debugLog("팀플룸 페이지 로딩 완료2");
     console.log(`[완료] 날짜 선택: ${selectedDate.selectedLabel || selectedDate.selectedValue || "-"}`);
 

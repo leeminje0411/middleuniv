@@ -138,13 +138,22 @@ function pushJobLog(line) {
   if (!jobState) return;
   const text = String(line || "").trim();
   if (!text) return;
-  jobState.logs.push(text);
-  if (jobState.logs.length > 300) {
-    jobState.logs = jobState.logs.slice(-300);
+  jobState.logs.push({ ts: new Date().toISOString(), line: text });
+  if (jobState.logs.length > 200) {
+    jobState.logs = jobState.logs.slice(-200);
+  }
+
+  // Also print to stdout so you can see what the worker is waiting on in the terminal.
+  try {
+    console.log(text);
+  } catch (e) {
+    // ignore
   }
 }
 
 async function getOrCreateSession({ loginId, password, headless }) {
+  const startTs = new Date().getTime();
+  pushJobLog(`getOrCreateSession start`);
   const normalizedId = String(loginId || "").trim();
   if (!normalizedId || !password) {
     throw new Error("아이디와 비밀번호가 필요합니다.");
@@ -290,22 +299,176 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function bookWaitStamp() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${hh}:${mi}:${ss}.${ms}`;
+}
+
+async function bookingLoginSnapshot(page) {
+  const url = String(page.url() || "");
+  const pwCount = await page.locator('input[type="password"]').count().catch(() => 0);
+  const loginMarkerCount = await page
+    .locator('text=중앙대학교 통합 LOGIN')
+    .count()
+    .catch(() => 0);
+  const headerText = await page
+    .locator('.btn-login')
+    .first()
+    .innerText()
+    .then((t) => String(t || "").replace(/\s+/g, " ").trim())
+    .catch(() => "");
+  return `url=${url} pwInputs=${pwCount} loginMarker=${loginMarkerCount} btn-login=${JSON.stringify(headerText)}`;
+}
+
+async function bookWaitTrace(label, fn, { timeoutMs, intervalMs, snapshot } = {}) {
+  const startedAt = Date.now();
+  const timeout = Number(timeoutMs) || 0;
+  const interval = Number(intervalMs) || 500;
+  let tick = 0;
+  let timer = null;
+
+  pushBookingLog(`[wait] ${bookWaitStamp()} START ${label}`);
+
+  timer = setInterval(async () => {
+    tick += 1;
+    const elapsed = Date.now() - startedAt;
+    let snapText = "";
+    if (typeof snapshot === "function") {
+      try {
+        const snap = await snapshot();
+        snapText = snap ? ` | ${snap}` : "";
+      } catch (e) {
+        snapText = ` | snapshot-error=${String(e && e.message ? e.message : e)}`;
+      }
+    }
+    pushBookingLog(`[wait] ${bookWaitStamp()} ... ${label} tick=${tick} elapsed=${elapsed}ms${snapText}`);
+  }, interval);
+
+  try {
+    if (!timeout) {
+      const result = await fn();
+      pushBookingLog(`[wait] ${bookWaitStamp()} END ${label} (${Date.now() - startedAt}ms)`);
+      return result;
+    }
+
+    const result = await Promise.race([
+      fn(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout ${timeout}ms`)), timeout))
+    ]);
+    pushBookingLog(`[wait] ${bookWaitStamp()} END ${label} (${Date.now() - startedAt}ms)`);
+    return result;
+  } catch (err) {
+    let snapText = "";
+    if (typeof snapshot === "function") {
+      try {
+        const snap = await snapshot();
+        snapText = snap ? ` | ${snap}` : "";
+      } catch (e) {
+        snapText = ` | snapshot-error=${String(e && e.message ? e.message : e)}`;
+      }
+    }
+    pushBookingLog(`[wait] ${bookWaitStamp()} FAIL ${label} (${Date.now() - startedAt}ms) error=${String(err && err.message ? err.message : err)}${snapText}`);
+    throw err;
+  } finally {
+    if (timer) clearInterval(timer);
+  }
+}
+
+async function detectLoggedInForBooking(page) {
+  const currentUrl = String(page.url() || "");
+  if (currentUrl && currentUrl.includes("/login")) {
+    return false;
+  }
+
+  const headerText = await page
+    .locator('.btn-login')
+    .first()
+    .innerText()
+    .then((t) => String(t || "").replace(/\s+/g, " ").trim())
+    .catch(() => "");
+  if (headerText && /\S+\s+님$/.test(headerText)) {
+    return true;
+  }
+
+  const hasPassword = await page
+    .locator('input[type="password"]')
+    .count()
+    .then((n) => n > 0)
+    .catch(() => false);
+  if (hasPassword) {
+    return false;
+  }
+
+  const hasLoginMarker = await page
+    .locator('text=중앙대학교 통합 LOGIN')
+    .count()
+    .then((n) => n > 0)
+    .catch(() => false);
+  if (hasLoginMarker) {
+    return false;
+  }
+
+  return Boolean(currentUrl);
+}
+
 async function doLoginForBooking(page, loginId, password) {
   const BASE_URL = "https://library.cau.ac.kr";
   const LOGIN_URL = `${BASE_URL}/login?returnUrl=%2F&queryParamsHandling=merge`;
 
-  await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle").catch(() => {});
-  await sleep(1200);
+  await bookWaitTrace(
+    "doLoginForBooking: goto LOGIN_URL domcontentloaded",
+    async () => {
+      await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    },
+    { timeoutMs: 25000, snapshot: () => bookingLoginSnapshot(page) }
+  );
 
-  const bodyText = await page.locator("body").innerText().catch(() => "");
-  if (!bodyText.includes("중앙대학교 통합 LOGIN")) {
-    // 이미 로그인 되어 있거나 페이지 구성이 바뀐 케이스는 계속 진행
+  const already = await bookWaitTrace(
+    "doLoginForBooking: detectLoggedIn(pre)",
+    async () => {
+      return await detectLoggedInForBooking(page);
+    },
+    { timeoutMs: 5000, snapshot: () => bookingLoginSnapshot(page) }
+  );
+  if (already) {
+    pushBookingLog(`doLoginForBooking: already logged in, skip url=${page.url()}`);
+    return;
   }
 
-  await page.waitForFunction(() => document.querySelectorAll("input").length >= 2, {
-    timeout: 15000
-  });
+  // Wait for login form to be interactable (avoid fixed sleeps)
+  const inputs = page.locator("input");
+  await bookWaitTrace(
+    "doLoginForBooking: wait input visible",
+    async () => {
+      await inputs.first().waitFor({ state: "visible", timeout: 15000 });
+    },
+    { timeoutMs: 16000, snapshot: () => bookingLoginSnapshot(page) }
+  );
+
+  await bookWaitTrace(
+    "doLoginForBooking: wait visible inputs>=2",
+    async () => {
+      await page
+        .waitForFunction(() => {
+          const els = Array.from(document.querySelectorAll("input"));
+          const visible = els.filter((el) => {
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style && style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+          });
+          return visible.length >= 2;
+        }, {
+          timeout: 15000
+        })
+        .catch(() => {});
+    },
+    { timeoutMs: 16000, snapshot: () => bookingLoginSnapshot(page) }
+  );
 
   const visibleInputs = await page.locator("input").evaluateAll((els) => {
     function isVisible(el) {
@@ -332,31 +495,53 @@ async function doLoginForBooking(page, loginId, password) {
   await page.locator("input").nth(idInput.idx).fill(String(loginId || "").trim());
   await page.locator("input").nth(pwInput.idx).fill(String(password || ""));
 
-  const clicked = await page.evaluate(() => {
-    function isVisible(el) {
-      const style = window.getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return style && style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
-    }
-    const buttons = Array.from(document.querySelectorAll("button"));
-    const loginButtons = buttons.filter((btn) => {
-      const text = (btn.textContent || "").replace(/\s+/g, " ").trim();
-      return text === "로그인" && isVisible(btn);
-    });
-    if (!loginButtons.length) return false;
-    loginButtons[0].click();
-    return true;
-  });
-
-  if (!clicked) {
-    throw new Error("로그인 버튼 클릭에 실패했습니다.");
+  const loginBtn = page.locator('button:has-text("로그인")').first();
+  if (!(await loginBtn.count().catch(() => 0))) {
+    throw new Error("로그인 버튼을 찾지 못했습니다.");
   }
 
-  await Promise.allSettled([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }),
-    page.waitForLoadState("networkidle")
-  ]);
-  await sleep(1200);
+  await bookWaitTrace(
+    "doLoginForBooking: click login -> navigation",
+    async () => {
+      await Promise.allSettled([
+        page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {}),
+        loginBtn.click({ timeout: 15000 }).catch(() => {})
+      ]);
+    },
+    { timeoutMs: 21000, snapshot: () => bookingLoginSnapshot(page) }
+  );
+
+  // Wait until we leave /login (do not swallow errors; outer bookWaitTrace owns the timeout)
+  await bookWaitTrace(
+    "doLoginForBooking: wait leave /login",
+    async () => {
+      await page.waitForURL(
+        (url) => {
+          const u = String(url || "");
+          return u.startsWith(BASE_URL) && !u.includes("/login");
+        },
+        { timeout: 20000 }
+      );
+    },
+    { timeoutMs: 21000, snapshot: () => bookingLoginSnapshot(page) }
+  );
+
+  // Then wait until our fast logged-in detector becomes true.
+  await bookWaitTrace(
+    "doLoginForBooking: wait detectLoggedIn(post)",
+    async () => {
+      const startedAt = Date.now();
+      const timeoutMs = 8000;
+      while (Date.now() - startedAt < timeoutMs) {
+        if (await detectLoggedInForBooking(page)) return;
+        await sleep(200);
+      }
+      throw new Error("detectLoggedInForBooking(post) timeout");
+    },
+    { timeoutMs: 9000, snapshot: () => bookingLoginSnapshot(page) }
+  );
+
+  pushBookingLog(`doLoginForBooking: login ok url=${page.url()}`);
 }
 
 async function selectDateOnListPage(page, dateValue) {
@@ -1217,10 +1402,19 @@ const server = http.createServer(async (req, res) => {
 
       withPlaywrightLock(async () => {
         try {
+          const runStartedAt = Date.now();
           pushJobLog("[worker] 세션 준비 중...");
           const scrapeHeadless = process.env.BOOK_HEADLESS === "true";
+
+          const sessionStartedAt = Date.now();
+          pushJobLog(`[worker] getOrCreateSession start headless=${String(scrapeHeadless)}`);
           const s = await getOrCreateSession({ loginId: id, password, headless: scrapeHeadless });
+          pushJobLog(`[worker] getOrCreateSession end (${Date.now() - sessionStartedAt}ms) url=${s && s.page ? s.page.url() : "-"}`);
+
+          const ensureStartedAt = Date.now();
+          pushJobLog(`[worker] ensureLoggedIn start url=${s && s.page ? s.page.url() : "-"}`);
           await ensureLoggedIn(s.page, s.loginId, s.password);
+          pushJobLog(`[worker] ensureLoggedIn end (${Date.now() - ensureStartedAt}ms) url=${s && s.page ? s.page.url() : "-"}`);
           s.lastActiveAt = new Date().toISOString();
 
           const runtimeRoot = process.cwd();
@@ -1247,6 +1441,8 @@ const server = http.createServer(async (req, res) => {
             page: s.page,
             keepOpen: true
           });
+
+          pushJobLog(`[worker] run total (${Date.now() - runStartedAt}ms)`);
 
           jobState.isRunning = false;
           jobState.finishedAt = new Date().toISOString();
