@@ -6,7 +6,7 @@ function debugLog(...args) {
   console.log("[DEBUG]", ...args);
 }
 
-const TRACE_WAIT = String(process.env.TRACE_WAIT || "1") !== "0";
+const TRACE_WAIT = String(process.env.TRACE_WAIT || "0") === "1";
 
 function waitStamp() {
   const d = new Date();
@@ -99,6 +99,8 @@ async function loginSnapshot(page) {
 const BASE_URL = "https://library.cau.ac.kr";
 const LOGIN_URL = `${BASE_URL}/login?returnUrl=%2F&queryParamsHandling=merge`;
 const TEAM_URL = `${BASE_URL}/library-services/room/team-rooms?tabIndex=2`;
+
+const DEFAULT_VIEWPORT = { width: 980, height: 720 };
 
 function nowStamp() {
   const d = new Date();
@@ -298,19 +300,105 @@ function buildMarkdown(data) {
   return lines.join("\n");
 }
 
+async function readAllBtnLoginTexts(page) {
+  return page
+    .evaluate(() => {
+      const els = Array.from(document.querySelectorAll(".btn-login"));
+      return els
+        .map((el) => {
+          const t = String(el.innerText || el.textContent || "");
+          return t.replace(/\s+/g, " ").trim();
+        })
+        .filter((t) => t);
+    })
+    .catch(() => []);
+}
+
+function extractUserNameFromTexts(texts) {
+  if (!Array.isArray(texts)) return null;
+  for (const t of texts) {
+    const normalized = String(t || "").replace(/\s+/g, " ").trim();
+    const m = normalized.match(/^(\S+)\s*님\b/);
+    if (m && m[1] && m[1] !== "로그인") return m[1];
+  }
+  return null;
+}
+
+async function readBodyText(page) {
+  return page
+    .locator("body")
+    .innerText()
+    .then((t) => String(t || "").replace(/\s+/g, " ").trim())
+    .catch(() => "");
+}
+
+function extractUserNameFromBodyText(bodyText) {
+  const text = String(bodyText || "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+
+  // Prefer greeting patterns if present.
+  const m1 = text.match(/\b(\S+)\s*님\s*반갑습니다\b/);
+  if (m1 && m1[1] && m1[1] !== "로그인") return m1[1];
+
+  const m2 = text.match(/\b(\S+)\s*님\b/);
+  if (m2 && m2[1] && m2[1] !== "로그인") return m2[1];
+
+  return null;
+}
+
+async function extractUserNameRobust(page, { maxMs } = {}) {
+  const deadlineMs = typeof maxMs === "number" ? maxMs : 2500;
+  const startedAt = Date.now();
+
+  let lastTexts = [];
+  while (Date.now() - startedAt < deadlineMs) {
+    const texts = await readAllBtnLoginTexts(page);
+    lastTexts = texts;
+    const extracted = extractUserNameFromTexts(texts);
+    if (extracted) {
+      return { userName: extracted, source: "btn-login", texts };
+    }
+    await sleep(250);
+  }
+
+  const bodyText = await readBodyText(page);
+  const extractedBody = extractUserNameFromBodyText(bodyText);
+  if (extractedBody) {
+    return { userName: extractedBody, source: "body", texts: lastTexts };
+  }
+
+  return { userName: null, source: "none", texts: lastTexts };
+}
+
+function explainUserNameExtraction(texts) {
+  if (!Array.isArray(texts) || texts.length === 0) {
+    return { ok: false, reason: "no .btn-login elements", sample: [] };
+  }
+  const normalized = texts.map((t) => String(t || "").replace(/\s+/g, " ").trim()).filter((t) => t);
+  const hasNim = normalized.some((t) => /\S+\s*님\b/.test(t));
+  if (!hasNim) {
+    return { ok: false, reason: "no candidate contains 님", sample: normalized.slice(0, 8) };
+  }
+  const extracted = extractUserNameFromTexts(normalized);
+  if (!extracted) {
+    return {
+      ok: false,
+      reason: "contains 님 but regex/extraction returned null",
+      sample: normalized.slice(0, 8)
+    };
+  }
+  return { ok: true, reason: "extracted", sample: normalized.slice(0, 8), userName: extracted };
+}
+
 async function detectLoggedIn(page) {
   const currentUrl = String(page.url() || "");
 
   const isLoginUrl = currentUrl.includes("/login");
 
   // Strong marker: header login button shows "... 님" when authenticated.
-  const headerName = await page
-    .locator(".btn-login")
-    .first()
-    .innerText()
-    .then((t) => String(t || "").replace(/\s+/g, " ").trim())
-    .catch(() => "");
-  if (headerName && /\S+\s+님$/.test(headerName)) {
+  const headerTexts = await readAllBtnLoginTexts(page);
+  const headerName = extractUserNameFromTexts(headerTexts);
+  if (headerName) {
     return true;
   }
 
@@ -925,6 +1013,9 @@ async function runTeamTodayScraper(options) {
   const credentials = opts.credentials || (await collectCredentials());
   const injectedPage = opts.page || null;
   const keepOpen = Boolean(opts.keepOpen);
+  const injectedUserName = opts.initialUserName != null && String(opts.initialUserName).trim()
+    ? String(opts.initialUserName).trim()
+    : null;
 
   ensureDir(outDir);
   ensureDir(path.dirname(liveJsonPath));
@@ -946,7 +1037,7 @@ async function runTeamTodayScraper(options) {
         "browser.newContext(viewport 1440x1200)",
         async () => {
           return await browser.newContext({
-            viewport: { width: 1440, height: 1200 }
+            viewport: headless ? { width: 1440, height: 1200 } : DEFAULT_VIEWPORT
           });
         },
         { timeoutMs: 15000 }
@@ -997,29 +1088,10 @@ async function runTeamTodayScraper(options) {
     debugLog("로그인 완료, 현재 URL:", page.url());
     console.log("[완료] 로그인 성공");
 
-    // 사용자 이름 추출
-    let userName = null;
-    try {
-      await page.waitForSelector(".btn-login", { timeout: 5000 });
-      userName = await page.evaluate(() => {
-        const userElement = document.querySelector(".btn-login");
-        if (userElement) {
-          const text = userElement.textContent || userElement.innerText || "";
-          // "이민제 님" → "이민제" 추출 ("로그인" 버튼 텍스트 등은 무시)
-          const normalized = String(text).replace(/\s+/g, " ").trim();
-          const match = normalized.match(/^(\S+)\s+님$/);
-          if (!match) return null;
-          return match[1] || null;
-        }
-        return null;
-      });
-      
-      if (userName) {
-        console.log("[사용자 이름]", userName);
-        debugLog("추출된 사용자 이름:", userName);
-      }
-    } catch (err) {
-      debugLog("사용자 이름 추출 실패:", err.message);
+    // Prefer worker-injected userName (more reliable than scraping DOM on Angular pages).
+    let userName = injectedUserName;
+    if (userName) {
+      debugLog("userName(injected):", userName);
     }
 
     liveBase.status = "running";
@@ -1034,6 +1106,33 @@ async function runTeamTodayScraper(options) {
     const selectedDate = await selectDateIfNeeded(page, opts.targetDateValue);
     debugLog("팀플룸 페이지 로딩 완료2");
     console.log(`[완료] 날짜 선택: ${selectedDate.selectedLabel || selectedDate.selectedValue || "-"}`);
+
+    // Team rooms query/DOM is ready now; if userName not injected, try to scrape it.
+    if (!userName) {
+      try {
+        const r = await extractUserNameRobust(page, { maxMs: 2500 });
+        userName = r.userName;
+        const texts = Array.isArray(r.texts) ? r.texts : [];
+        const explain = explainUserNameExtraction(texts);
+        if (userName) {
+          debugLog(
+            "userName(after query): ok",
+            JSON.stringify({ userName, source: r.source, candidates: texts.length, sample: (explain.sample || []).slice(0, 8) })
+          );
+        } else {
+          debugLog(
+            "userName(after query): null",
+            JSON.stringify({ reason: explain.reason, source: r.source, candidates: texts.length, sample: (explain.sample || []).slice(0, 8) })
+          );
+        }
+        if (userName) {
+          liveBase.userName = userName;
+          writeLive(liveBase);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
 
     liveBase.selectedDateValue = selectedDate.selectedValue || null;
     liveBase.selectedDateLabel = selectedDate.selectedLabel || null;
@@ -1188,6 +1287,7 @@ async function processAllRoomsOptimizedParallel(page, rooms) {
       sourceUrl: TEAM_URL,
       selectedDateValue: selectedDate.selectedValue || null,
       selectedDateLabel: selectedDate.selectedLabel || null,
+      userName: userName || null,
       status: "done",
       currentStep: "완료",
       rooms
@@ -1201,9 +1301,7 @@ async function processAllRoomsOptimizedParallel(page, rooms) {
     console.log("==================================================");
     console.log("완료");
     console.log("==================================================");
-    console.log(`1) LIVE JSON : ${liveJsonPath}`);
-    console.log(`2) JSON 원본 : ${finalJsonPath}`);
-    console.log(`3) 요약 MD   : ${finalMdPath}`);
+
 
     return {
       outDir,

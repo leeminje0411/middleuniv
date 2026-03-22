@@ -46,6 +46,28 @@ function ensureDir(dirPath) {
   }
 }
 
+async function tryExtractUserNameFromPage(page) {
+  if (!page) return null;
+  try {
+    const texts = await page
+      .evaluate(() => {
+        return Array.from(document.querySelectorAll('.btn-login'))
+          .map((el) => String(el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim())
+          .filter((t) => t);
+      })
+      .catch(() => []);
+    for (const t of texts) {
+      const m = String(t || '').replace(/\s+/g, ' ').trim().match(/^(\S+)\s*님\b/);
+      if (m && m[1] && m[1] !== '로그인') {
+        return m[1];
+      }
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 ensureDir(PUBLIC_DIR);
 ensureDir(LIVE_DIR);
 ensureDir(RUNTIME_DIR);
@@ -53,6 +75,8 @@ ensureDir(RUNTIME_DIR);
 let session = null;
 let jobState = null;
 let playwrightLock = Promise.resolve();
+
+const DEFAULT_VIEWPORT = { width: 980, height: 720 };
 
 function ensureBookingState() {
   if (!jobState) {
@@ -116,14 +140,49 @@ function makeIdleState() {
   };
 }
 
+function computeProgressFromLive(live) {
+  if (!live) return null;
+  const step = live.currentStep ? String(live.currentStep) : "";
+
+  const norm = step.replace(/\s+/g, " ").trim();
+  const isLogin = norm.includes("로그인");
+  const isEnterTeam = norm.includes("팀플룸") && norm.includes("진입");
+  const isList = norm.includes("리스트") && norm.includes("수집");
+  const isDetail = norm.includes("상세") && norm.includes("수집");
+  const isDone = norm === "완료" || norm.includes("완료");
+
+  if (isDone) return 100;
+  if (isDetail) {
+    const rooms = Array.isArray(live.rooms) ? live.rooms : [];
+    const total = rooms.length;
+    if (!total) return 70;
+    const done = rooms.filter((r) => r && r.detail).length;
+    const ratio = Math.max(0, Math.min(1, done / total));
+    return Math.round(70 + ratio * 28);
+  }
+  if (isList) return 45;
+  if (isEnterTeam) return 25;
+  if (isLogin) return 5;
+
+  // Fallback: when status indicates done.
+  if (String(live.status || "") === "done") return 100;
+  return null;
+}
+
 function getWorkerState() {
   if (!jobState) {
     return makeIdleState();
   }
   const live = safeReadJson(LIVE_JSON_PATH);
+  const data = live || jobState.data || null;
+  const computedProgress = jobState && jobState.isRunning ? computeProgressFromLive(data) : null;
+  const computedStep = jobState && jobState.isRunning && data && data.currentStep ? String(data.currentStep) : null;
+
   return {
     ...jobState,
-    data: live || jobState.data || null,
+    progress: computedProgress != null ? computedProgress : jobState.progress,
+    step: computedStep != null ? computedStep : jobState.step,
+    data,
     session: session
       ? {
           hasBrowser: Boolean(session.browser),
@@ -162,6 +221,15 @@ async function getOrCreateSession({ loginId, password, headless }) {
   const desiredHeadless = typeof headless === "boolean" ? headless : process.env.BOOK_HEADLESS === "true";
 
   if (session && session.loginId === normalizedId) {
+    const pageClosed = await session.page?.isClosed?.().catch?.(() => true);
+    if (pageClosed || !session.page || !session.context || !session.browser) {
+      pushJobLog("getOrCreateSession: existing session has closed page/context/browser -> recreate");
+      await closeSession().catch(() => {});
+      session = null;
+    }
+  }
+
+  if (session && session.loginId === normalizedId) {
     if (typeof session.headless === "boolean" && session.headless !== desiredHeadless) {
       await closeSession().catch(() => {});
       session = null;
@@ -176,7 +244,9 @@ async function getOrCreateSession({ loginId, password, headless }) {
 
   const slowMo = Number(process.env.BOOK_SLOWMO_MS) || 0;
   const browser = await chromium.launch({ headless: desiredHeadless, slowMo });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } });
+  const context = await browser.newContext({
+    viewport: desiredHeadless ? { width: 1440, height: 1200 } : DEFAULT_VIEWPORT
+  });
   const page = await context.newPage();
 
   session = {
@@ -1404,6 +1474,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const runStartedAt = Date.now();
           pushJobLog("[worker] 세션 준비 중...");
+
           const scrapeHeadless = process.env.BOOK_HEADLESS === "true";
 
           const sessionStartedAt = Date.now();
@@ -1416,6 +1487,9 @@ const server = http.createServer(async (req, res) => {
           await ensureLoggedIn(s.page, s.loginId, s.password);
           pushJobLog(`[worker] ensureLoggedIn end (${Date.now() - ensureStartedAt}ms) url=${s && s.page ? s.page.url() : "-"}`);
           s.lastActiveAt = new Date().toISOString();
+
+          const extractedUserName = await tryExtractUserNameFromPage(s.page);
+          pushJobLog(`[worker] userName extracted=${extractedUserName || "null"}`);
 
           const runtimeRoot = process.cwd();
           const outDir = path.join(
@@ -1438,11 +1512,10 @@ const server = http.createServer(async (req, res) => {
             headless: process.env.BOOK_HEADLESS === "true",
             credentials: { loginId: s.loginId, password: s.password },
             targetDateValue: dateValue,
+            initialUserName: extractedUserName,
             page: s.page,
             keepOpen: true
           });
-
-          pushJobLog(`[worker] run total (${Date.now() - runStartedAt}ms)`);
 
           jobState.isRunning = false;
           jobState.finishedAt = new Date().toISOString();
@@ -1450,10 +1523,7 @@ const server = http.createServer(async (req, res) => {
           jobState.step = "완료";
           jobState.progress = 100;
           jobState.data = result && result.output ? result.output : null;
-          pushJobLog("[worker] 스크래퍼 완료");
-          pushJobLog(`[worker] OUT_DIR: ${result.outDir}`);
-          pushJobLog(`[worker] LIVE JSON: ${result.liveJsonPath}`);
-          pushJobLog(`[worker] FINAL JSON: ${result.finalJsonPath}`);
+          pushJobLog(`[worker] run total (${Date.now() - runStartedAt}ms)`);
         } catch (err) {
           jobState.isRunning = false;
           jobState.finishedAt = new Date().toISOString();
@@ -1536,5 +1606,5 @@ server.listen(PORT, () => {
   console.log("DASHBOARD : http://localhost:" + PORT + "/dashboard");
   console.log("ROOT      : " + ROOT_DIR);
   console.log("PUBLIC    : " + PUBLIC_DIR);
-  console.log("LIVE JSON : " + LIVE_JSON_PATH);
+  console.log("" + LIVE_JSON_PATH);
 });

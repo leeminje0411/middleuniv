@@ -18,6 +18,8 @@ export default function LoginPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [pct, setPct] = useState(0);
+  const targetPctRef = useRef(0);
+  const rafRef = useRef(null);
 
   const isMountedRef = useRef(false);
 
@@ -28,6 +30,43 @@ export default function LoginPage() {
       document.body.classList.remove("logging-in");
     };
   }, []);
+
+  useEffect(() => {
+    if (!isRunning) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+
+      const target = Math.max(0, Math.min(100, Number(targetPctRef.current) || 0));
+      setPct((cur) => {
+        const current = Math.max(0, Math.min(100, Number(cur) || 0));
+        const diff = target - current;
+        if (Math.abs(diff) < 0.2) return target;
+
+        // Smoothly approach target; faster when far, slower when close.
+        const next = current + diff * 0.12;
+        return Math.max(0, Math.min(100, next));
+      });
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isRunning]);
 
   const canSubmit = useMemo(() => {
     return !isRunning && loginId.trim() && loginPassword;
@@ -99,7 +138,7 @@ export default function LoginPage() {
         setStatusText(step);
       }
       if (Number.isFinite(p)) {
-        setPct(Math.max(0, Math.min(100, p)));
+        targetPctRef.current = Math.max(0, Math.min(100, p));
       }
 
       try {
@@ -139,6 +178,7 @@ export default function LoginPage() {
     }
 
     setIsRunning(true);
+    targetPctRef.current = 0;
     setPct(0);
     setStatusText("핸드쉐이크 진행중");
     document.body.classList.add("logging-in");

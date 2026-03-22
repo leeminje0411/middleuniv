@@ -24,7 +24,7 @@ async function main() {
     liveJsonPath,
     finalJsonPath,
     finalMdPath,
-    headless: false
+    headless: true
   });
 
   console.log("");
