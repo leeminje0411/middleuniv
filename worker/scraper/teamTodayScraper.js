@@ -5,7 +5,7 @@ const { chromium } = require("playwright");
 function debugLog(...args) {
   console.log("[DEBUG]", ...args);
 }
-
+//ㅇㅇ
 const TRACE_WAIT = String(process.env.TRACE_WAIT || "0") === "1";
 
 function waitStamp() {
