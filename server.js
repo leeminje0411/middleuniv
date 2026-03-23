@@ -1,6 +1,8 @@
 const http = require("http");
+require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
 const url = require("url");
 const { chromium } = require("playwright");
 
@@ -17,6 +19,512 @@ const LIVE_DIR = path.join(ROOT_DIR, "live");
 const LIVE_JSON_PATH = path.join(LIVE_DIR, "latest_team_today.json");
 const RUNTIME_DIR = path.join(ROOT_DIR, "runtime");
 const TEAM_MEMBERS_PATH = path.join(RUNTIME_DIR, "team_members.json");
+
+let _supabaseClient = null;
+function getSupabaseClientIfAvailable() {
+  if (_supabaseClient !== null) return _supabaseClient;
+
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    _supabaseClient = undefined;
+    return _supabaseClient;
+  }
+
+  try {
+    // Lazy-require so the server can still run without this dependency.
+    const { createClient } = require("@supabase/supabase-js");
+    _supabaseClient = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+      global: {
+        headers: {
+          "x-client-info": "cau_probe_runtime/server"
+        }
+      }
+    });
+    return _supabaseClient;
+  } catch (err) {
+    _supabaseClient = undefined;
+    return _supabaseClient;
+  }
+}
+
+function readMembersFromJsonFile() {
+  if (!fs.existsSync(TEAM_MEMBERS_PATH)) return [];
+  const raw = fs.readFileSync(TEAM_MEMBERS_PATH, "utf8");
+  const parsed = raw ? JSON.parse(raw) : {};
+  const members = parsed && Array.isArray(parsed.members) ? parsed.members : [];
+  return members;
+}
+
+function writeMembersToJsonFile(members) {
+  if (!fs.existsSync(RUNTIME_DIR)) {
+    fs.mkdirSync(RUNTIME_DIR, { recursive: true });
+  }
+  const payload = { members: Array.isArray(members) ? members : [] };
+  fs.writeFileSync(TEAM_MEMBERS_PATH, JSON.stringify(payload, null, 2) + "\n", "utf8");
+}
+
+function normalizeEverytimeUrl(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+
+  try {
+    const u = new URL(raw);
+    if (!u.hostname.endsWith("everytime.kr")) return "";
+    u.hash = "";
+    return u.toString();
+  } catch (e) {
+    return "";
+  }
+}
+
+function extractEverytimeTokenFromUrl(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  const m = raw.match(/\/\@([^/?#]+)/);
+  return m && m[1] ? String(m[1]) : "";
+}
+
+function fetchTextWithRedirects(targetUrl, { maxRedirects = 5, timeoutMs = 10000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const normalized = String(targetUrl || "").trim();
+    if (!normalized) {
+      reject(new Error("url이 필요합니다."));
+      return;
+    }
+
+    let current = normalized;
+    let redirects = 0;
+
+    function doRequest(nextUrl) {
+      let u;
+      try {
+        u = new URL(nextUrl);
+      } catch (e) {
+        reject(new Error("url 형식이 올바르지 않습니다."));
+        return;
+      }
+
+      const lib = u.protocol === "https:" ? https : http;
+      const req = lib.request(
+        {
+          method: "GET",
+          hostname: u.hostname,
+          port: u.port || (u.protocol === "https:" ? 443 : 80),
+          path: u.pathname + (u.search || ""),
+          headers: {
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            accept: "text/html,application/xhtml+xml"
+          }
+        },
+        (res) => {
+          const status = res.statusCode || 0;
+          const loc = res.headers && res.headers.location ? String(res.headers.location) : "";
+
+          if (status >= 300 && status < 400 && loc) {
+            if (redirects >= maxRedirects) {
+              reject(new Error("redirect가 너무 많습니다."));
+              res.resume();
+              return;
+            }
+
+            redirects += 1;
+            const resolved = new URL(loc, u.toString()).toString();
+            current = resolved;
+            res.resume();
+            doRequest(resolved);
+            return;
+          }
+
+          if (status < 200 || status >= 300) {
+            reject(new Error(`HTTP ${status}`));
+            res.resume();
+            return;
+          }
+
+          res.setEncoding("utf8");
+          let body = "";
+          res.on("data", (chunk) => {
+            body += chunk;
+            if (body.length > 6 * 1024 * 1024) {
+              req.destroy(new Error("응답이 너무 큽니다."));
+            }
+          });
+          res.on("end", () => {
+            resolve({ url: current, text: body });
+          });
+        }
+      );
+
+      req.on("error", (err) => reject(err));
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error("요청 시간이 초과되었습니다."));
+      });
+      req.end();
+    }
+
+    doRequest(current);
+  });
+}
+
+function parseEverytimeProfileAndTerms(html, baseUrl) {
+  const text = String(html || "");
+  const base = String(baseUrl || "https://everytime.kr");
+
+  function stripTags(s) {
+    return String(s || "")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  const nameMatch = text.match(/<aside[\s\S]*?<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const profileName = nameMatch && nameMatch[1] ? stripTags(nameMatch[1]) : "";
+
+  const ogMatch = text.match(/<meta\s+property=["']og:url["']\s+content=["']([^"']+)["']/i);
+  const ogUrl = ogMatch && ogMatch[1] ? String(ogMatch[1]).trim() : "";
+
+  const terms = [];
+  const asideMatch = text.match(/<aside[\s\S]*?<div\s+class=["']menu["'][\s\S]*?<\/aside>/i);
+  const asideHtml = asideMatch ? asideMatch[0] : "";
+
+  if (asideHtml) {
+    const liRe = /<li([^>]*)>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/li>/gi;
+    let m;
+    while ((m = liRe.exec(asideHtml))) {
+      const liAttrs = m[1] || "";
+      const href = m[2] || "";
+      const label = stripTags(m[3] || "");
+
+      let abs = "";
+      try {
+        abs = new URL(href, base).toString();
+      } catch (e) {
+        abs = "";
+      }
+
+      if (!abs) continue;
+      if (!abs.includes("everytime.kr")) continue;
+
+      terms.push({
+        label: String(label).trim(),
+        url: abs,
+        sourceTermToken: extractEverytimeTokenFromUrl(abs) || null,
+        isCurrent: /class\s*=\s*["'][^"']*active[^"']*["']/i.test(liAttrs)
+      });
+    }
+  }
+
+  const isTermDetail = /class=["']tablebody["']/i.test(text) && /class=["']subject\b/i.test(text);
+
+  return {
+    profileName,
+    ogUrl: ogUrl || null,
+    isTermDetail,
+    terms
+  };
+}
+
+function parseEverytimeTimetableFromHtml(html, { pxPerHour } = {}) {
+  const text = String(html || "");
+
+  function stripTags(s) {
+    return String(s || "")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function getStylePx(styleText, prop) {
+    const s = String(styleText || "");
+    const re = new RegExp(`${prop}\\s*:\\s*([0-9.]+)px`, "i");
+    const m = s.match(re);
+    if (!m || !m[1]) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const subjectExists = /class=["']subject\b/i.test(text);
+  if (!subjectExists) {
+    return { courses: [], meetings: [], debug: { subjectExists: false } };
+  }
+
+  // Heuristic: Everytime timetable uses ~75px per hour (2h ~= 150px).
+  const usedPxPerHour = Number.isFinite(Number(pxPerHour)) ? Number(pxPerHour) : 75;
+  const pxPerMinute = usedPxPerHour / 60;
+
+  // Extract timetable columns (Mon..Sun). We only support visible columns; hidden (Sat/Sun) are commonly display:none.
+  const tableMatch = text.match(/<table\s+class=["']tablebody["'][\s\S]*?<\/table>/i);
+  const tableHtml = tableMatch ? tableMatch[0] : "";
+  const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+
+  const days = [];
+  let tdIdx = 0;
+  let td;
+  while ((td = tdRe.exec(tableHtml))) {
+    tdIdx += 1;
+    // Skip the first td? In the actual markup, first cell is <th> times, and then <td> columns.
+    const dayOfWeek = tdIdx - 1; // 0=Mon
+    if (dayOfWeek < 0 || dayOfWeek > 6) continue;
+    const tdHtml = td[1] || "";
+    // Ignore hidden weekend columns.
+    if (/display\s*:\s*none/i.test(td[0])) continue;
+    days.push({ dayOfWeek, html: tdHtml });
+  }
+
+  const courseMap = new Map();
+  const meetingRows = [];
+
+  for (const day of days) {
+    const tdHtml = String(day.html || "");
+    const subjectRe = /<div\s+class=["']subject\s+([^"']+)["'][^>]*style=["']([^"']+)["'][^>]*>([\s\S]*?)<\/div>/gi;
+    let sm;
+    while ((sm = subjectRe.exec(tdHtml))) {
+      const classTail = sm[1] || "";
+      const styleText = sm[2] || "";
+      const inner = sm[3] || "";
+
+      const topPx = getStylePx(styleText, "top");
+      const heightPx = getStylePx(styleText, "height");
+      if (topPx == null || heightPx == null) continue;
+
+      const startMinute = Math.max(0, Math.min(1439, Math.round(topPx / pxPerMinute)));
+      const endMinute = Math.max(1, Math.min(1440, Math.round((topPx + heightPx) / pxPerMinute)));
+      if (endMinute <= startMinute) continue;
+
+      const nameMatch = inner.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+      const courseName = nameMatch ? stripTags(nameMatch[1]) : "";
+      if (!courseName) continue;
+
+      const instructorMatch = inner.match(/<em[^>]*>([\s\S]*?)<\/em>/i);
+      const instructorName = instructorMatch ? stripTags(instructorMatch[1]) : null;
+
+      const locMatch = inner.match(/<span[^>]*>([\s\S]*?)<\/span>/i);
+      const locationText = locMatch ? stripTags(locMatch[1]) : null;
+
+      const colorKeyMatch = String(classTail).match(/\bcolor(\d+)\b/i);
+      const colorKey = colorKeyMatch ? `color${colorKeyMatch[1]}` : null;
+
+      const courseKey = `${courseName}||${instructorName || ""}||${locationText || ""}`;
+      if (!courseMap.has(courseKey)) {
+        courseMap.set(courseKey, {
+          course_name: courseName,
+          instructor_name: instructorName,
+          location_text: locationText,
+          color_key: colorKey,
+          meetings: []
+        });
+      }
+      courseMap.get(courseKey).meetings.push({
+        day_of_week: day.dayOfWeek,
+        start_minute: startMinute,
+        end_minute: endMinute
+      });
+    }
+  }
+
+  const courses = Array.from(courseMap.values());
+  return {
+    courses,
+    meetingCount: courses.reduce((acc, c) => acc + (c.meetings ? c.meetings.length : 0), 0),
+    debug: {
+      subjectExists: true,
+      pxPerHour: usedPxPerHour,
+      dayCount: days.length
+    }
+  };
+}
+
+async function fetchEverytimeHtmlWithFallback(targetUrl) {
+  const fetched = await fetchTextWithRedirects(targetUrl);
+  const parsed = parseEverytimeProfileAndTerms(fetched.text, fetched.url);
+
+  const hasTerms = Boolean(parsed && Array.isArray(parsed.terms) && parsed.terms.length);
+  const hasName = Boolean(parsed && String(parsed.profileName || "").trim());
+  const looksOk = Boolean(hasTerms || hasName || parsed.isTermDetail);
+
+  if (looksOk) {
+    return { url: fetched.url, text: fetched.text, via: "http" };
+  }
+
+  const rendered = await withPlaywrightLock(async () => {
+    const browser = await chromium.launch({
+      headless: true,
+      args: ["--disable-blink-features=AutomationControlled"]
+    });
+    const context = await browser.newContext({
+      viewport: DEFAULT_VIEWPORT,
+      locale: "ko-KR",
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+    });
+    await context.addInitScript(() => {
+      try {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+        Object.defineProperty(navigator, "languages", { get: () => ["ko-KR", "ko", "en-US", "en"] });
+        Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
+      } catch (e) {
+        // ignore
+      }
+    });
+    const page = await context.newPage();
+    try {
+      await page.route("**/*", (route) => {
+        const type = route.request().resourceType();
+        if (type === "image" || type === "font" || type === "media") {
+          route.abort().catch(() => {});
+          return;
+        }
+        route.continue().catch(() => {});
+      });
+
+      await page.goto(fetched.url, { waitUntil: "domcontentloaded", timeout: 25000 });
+      await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+
+      await Promise.race([
+        page.waitForSelector("aside .menu ol li a", { timeout: 12000 }).catch(() => null),
+        page.waitForSelector(".tablebody .subject", { timeout: 12000 }).catch(() => null)
+      ]);
+      await page.waitForTimeout(900);
+
+      const debug = await page
+        .evaluate(() => {
+          const links = document.querySelectorAll("aside .menu ol li a");
+          const subjects = document.querySelectorAll(".tablebody .subject");
+          const aside = document.querySelector("aside");
+          const head = document.querySelector(".tablehead");
+          const body = document.querySelector(".tablebody");
+          const clip = (s) => {
+            const t = String(s || "");
+            return t.length > 1200 ? t.slice(0, 1200) : t;
+          };
+
+          return {
+            termLinkCount: links ? links.length : 0,
+            subjectCount: subjects ? subjects.length : 0,
+            asideHtmlHead: clip(aside ? aside.innerHTML : ""),
+            tableheadHtmlHead: clip(head ? head.innerHTML : ""),
+            tablebodyHtmlHead: clip(body ? body.innerHTML : "")
+          };
+        })
+        .catch(() => null);
+
+      const html = await page.content();
+      return { url: page.url(), text: html, debug };
+    } finally {
+      await context.close().catch(() => {});
+      await browser.close().catch(() => {});
+    }
+  });
+
+  return { url: rendered.url, text: rendered.text, via: "playwright", debug: rendered.debug || null };
+}
+
+async function loadTeamMembersByPortalLoginId(portalLoginId) {
+  const loginId = String(portalLoginId || "").trim();
+  if (!loginId) return [];
+
+  const supabase = getSupabaseClientIfAvailable();
+  if (!supabase) {
+    return readMembersFromJsonFile();
+  }
+
+  const { data: user, error: userError } = await supabase
+    .rpc("get_or_create_portal_user", { p_portal_login_id: loginId });
+  if (userError || !user || !user.id) {
+    throw new Error(userError && userError.message ? userError.message : "portal user 조회 실패");
+  }
+
+  const { data: rows, error: rowsError } = await supabase
+    .from("team_members")
+    .select("name, student_id")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
+
+  if (rowsError) {
+    throw new Error(rowsError.message || "team_members 조회 실패");
+  }
+
+  return (rows || []).map((r) => ({
+    name: r && r.name != null ? String(r.name) : "",
+    studentId: r && r.student_id != null ? String(r.student_id) : ""
+  }));
+}
+
+async function addOrUpdateTeamMemberByPortalLoginId({ portalLoginId, name, studentId }) {
+  const loginId = String(portalLoginId || "").trim();
+  const safeName = String(name || "").trim();
+  const safeStudentId = String(studentId || "").trim();
+  if (!loginId) throw new Error("portalLoginId가 필요합니다.");
+  if (!safeName) throw new Error("name이 필요합니다.");
+  if (!safeStudentId) throw new Error("studentId가 필요합니다.");
+
+  const supabase = getSupabaseClientIfAvailable();
+  if (!supabase) {
+    const members = readMembersFromJsonFile();
+    const next = Array.isArray(members) ? members.slice() : [];
+    const idx = next.findIndex((m) => String(m && m.studentId || "").trim() === safeStudentId);
+    const item = { name: safeName, studentId: safeStudentId };
+    if (idx >= 0) next[idx] = item;
+    else next.push(item);
+    writeMembersToJsonFile(next);
+    return item;
+  }
+
+  const { data: member, error } = await supabase.rpc("add_team_member", {
+    p_portal_login_id: loginId,
+    p_name: safeName,
+    p_student_id: safeStudentId
+  });
+  if (error || !member) {
+    throw new Error(error && error.message ? error.message : "team member 저장 실패");
+  }
+
+  return {
+    name: member && member.name != null ? String(member.name) : safeName,
+    studentId: member && member.student_id != null ? String(member.student_id) : safeStudentId
+  };
+}
+
+async function deleteTeamMemberByPortalLoginId({ portalLoginId, studentId }) {
+  const loginId = String(portalLoginId || "").trim();
+  const safeStudentId = String(studentId || "").trim();
+  if (!loginId) throw new Error("portalLoginId가 필요합니다.");
+  if (!safeStudentId) throw new Error("studentId가 필요합니다.");
+
+  const supabase = getSupabaseClientIfAvailable();
+  if (!supabase) {
+    const members = readMembersFromJsonFile();
+    const next = (Array.isArray(members) ? members : []).filter(
+      (m) => String(m && m.studentId || "").trim() !== safeStudentId
+    );
+    writeMembersToJsonFile(next);
+    return { deleted: true };
+  }
+
+  const { data: user, error: userError } = await supabase
+    .rpc("get_or_create_portal_user", { p_portal_login_id: loginId });
+  if (userError || !user || !user.id) {
+    throw new Error(userError && userError.message ? userError.message : "portal user 조회 실패");
+  }
+
+  const { error: delError } = await supabase
+    .from("team_members")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("student_id", safeStudentId);
+
+  if (delError) {
+    throw new Error(delError.message || "team member 삭제 실패");
+  }
+
+  return { deleted: true };
+}
 
 function safeRemovePath(targetPath) {
   if (!targetPath) return;
@@ -865,12 +1373,7 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
   }
 
   async function addCompanionsIfAny() {
-    if (!fs.existsSync(TEAM_MEMBERS_PATH)) {
-      return;
-    }
-    const raw = fs.readFileSync(TEAM_MEMBERS_PATH, "utf8");
-    const parsed = raw ? JSON.parse(raw) : {};
-    const companions = parsed && Array.isArray(parsed.members) ? parsed.members : [];
+    const companions = await loadTeamMembersByPortalLoginId(id).catch(() => []);
     if (!companions.length) {
       return;
     }
@@ -1265,17 +1768,16 @@ const server = http.createServer(async (req, res) => {
 
   if (method === "GET" && pathname === "/api/team-members") {
     try {
-      if (!fs.existsSync(TEAM_MEMBERS_PATH)) {
-        sendJson(res, 200, {
-          ok: true,
-          members: []
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
         });
         return;
       }
 
-      const raw = fs.readFileSync(TEAM_MEMBERS_PATH, "utf8");
-      const parsed = raw ? JSON.parse(raw) : {};
-      const members = parsed && Array.isArray(parsed.members) ? parsed.members : [];
+      const members = await loadTeamMembersByPortalLoginId(portalLoginId);
 
       sendJson(res, 200, {
         ok: true,
@@ -1287,6 +1789,354 @@ const server = http.createServer(async (req, res) => {
         ok: false,
         message: "팀원 정보 로드 실패",
         error: err && err.message ? err.message : String(err)
+      });
+      return;
+    }
+  }
+
+  if (method === "POST" && pathname === "/api/everytime/preview-term") {
+    try {
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
+        });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const termUrl = normalizeEverytimeUrl(body && body.termUrl != null ? body.termUrl : "");
+      const pxPerHour = body && body.pxPerHour != null ? Number(body.pxPerHour) : undefined;
+      if (!termUrl) {
+        sendJson(res, 400, { ok: false, message: "termUrl이 필요합니다." });
+        return;
+      }
+
+      const fetched = await fetchEverytimeHtmlWithFallback(termUrl);
+      const parsedMeta = parseEverytimeProfileAndTerms(fetched.text, fetched.url);
+      const timetableParsed = parseEverytimeTimetableFromHtml(fetched.text, { pxPerHour });
+
+      // Try to infer label from aside (term detail pages usually have only one active term)
+      const termLabel = (parsedMeta.terms.find((t) => t && t.isCurrent) || parsedMeta.terms[0] || {}).label;
+
+      sendJson(res, 200, {
+        ok: true,
+        finalUrl: fetched.url,
+        fetchedVia: fetched.via,
+        fetchedDebug: fetched.debug || null,
+        profileName: parsedMeta.profileName,
+        termLabel: String(termLabel || "").trim() || null,
+        courses: timetableParsed && Array.isArray(timetableParsed.courses) ? timetableParsed.courses : [],
+        meetingCount: timetableParsed && timetableParsed.meetingCount != null ? timetableParsed.meetingCount : 0,
+        timetableDebug: timetableParsed && timetableParsed.debug ? timetableParsed.debug : null
+      });
+      return;
+    } catch (err) {
+      const message = err && err.message ? String(err.message) : String(err);
+      const statusCode = message === "JSON 파싱 실패" ? 400 : 500;
+      sendJson(res, statusCode, {
+        ok: false,
+        message
+      });
+      return;
+    }
+  }
+
+  if (method === "POST" && pathname === "/api/everytime/parse") {
+    try {
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
+        });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const inputUrl = body && body.url != null ? body.url : "";
+      const targetUrl = normalizeEverytimeUrl(inputUrl);
+      if (!targetUrl) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "everytime.kr 링크를 입력해주세요."
+        });
+        return;
+      }
+
+      const fetched = await fetchEverytimeHtmlWithFallback(targetUrl);
+      const parsed = parseEverytimeProfileAndTerms(fetched.text, fetched.url);
+
+      sendJson(res, 200, {
+        ok: true,
+        inputUrl: targetUrl,
+        finalUrl: fetched.url,
+        fetchedVia: fetched.via,
+        fetchedDebug: fetched.debug || null,
+        profileName: parsed.profileName,
+        sourceProfileToken: extractEverytimeTokenFromUrl(targetUrl) || null,
+        terms: parsed.terms,
+        isTermDetail: parsed.isTermDetail
+      });
+      return;
+    } catch (err) {
+      sendJson(res, 500, {
+        ok: false,
+        message: "에타 링크 파싱 실패",
+        error: err && err.message ? err.message : String(err)
+      });
+      return;
+    }
+  }
+
+  if (method === "POST" && pathname === "/api/everytime/sync-term") {
+    try {
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
+        });
+        return;
+      }
+
+      const supabase = getSupabaseClientIfAvailable();
+      if (!supabase) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "Supabase 설정이 필요합니다. (.env의 SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)"
+        });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const termUrl = normalizeEverytimeUrl(body && body.termUrl != null ? body.termUrl : "");
+      const profileUrl = normalizeEverytimeUrl(body && body.profileUrl != null ? body.profileUrl : "");
+      const pxPerHour = body && body.pxPerHour != null ? Number(body.pxPerHour) : undefined;
+      if (!termUrl) {
+        sendJson(res, 400, { ok: false, message: "termUrl이 필요합니다." });
+        return;
+      }
+
+      const { data: user, error: userError } = await supabase
+        .rpc("get_or_create_portal_user", { p_portal_login_id: portalLoginId });
+      if (userError || !user || !user.id) {
+        throw new Error(userError && userError.message ? userError.message : "portal user 조회 실패");
+      }
+
+      const fetched = await fetchEverytimeHtmlWithFallback(termUrl);
+      const parsed = parseEverytimeProfileAndTerms(fetched.text, fetched.url);
+      const profileName = parsed.profileName || null;
+      const sourceProfileToken = extractEverytimeTokenFromUrl(profileUrl) || extractEverytimeTokenFromUrl(termUrl) || null;
+
+      const { data: profileRow, error: profileError } = await supabase
+        .from("timetable_profiles")
+        .upsert(
+          {
+            user_id: user.id,
+            source: "everytime",
+            source_profile_token: sourceProfileToken,
+            profile_name: profileName,
+            source_profile_url: profileUrl || null
+          },
+          { onConflict: "user_id,source" }
+        )
+        .select("id")
+        .single();
+
+      if (profileError || !profileRow || !profileRow.id) {
+        throw new Error(profileError && profileError.message ? profileError.message : "timetable_profiles 저장 실패");
+      }
+
+      const termToken = extractEverytimeTokenFromUrl(termUrl) || null;
+      const termLabel = (parsed.terms.find((t) => t && t.url === fetched.url) || parsed.terms.find((t) => t && t.isCurrent) || parsed.terms[0] || {})
+        .label;
+      const safeTermLabel = String(termLabel || "선택 학기").trim();
+
+      await supabase
+        .from("timetable_terms")
+        .update({ is_current: false })
+        .eq("profile_id", profileRow.id)
+        .eq("is_current", true);
+
+      const { data: termRow, error: termError } = await supabase
+        .from("timetable_terms")
+        .upsert(
+          {
+            profile_id: profileRow.id,
+            term_label: safeTermLabel,
+            source_term_token: termToken,
+            source_term_url: termUrl,
+            is_current: true
+          },
+          { onConflict: "profile_id,term_label" }
+        )
+        .select("id")
+        .single();
+
+      if (termError || !termRow || !termRow.id) {
+        throw new Error(termError && termError.message ? termError.message : "timetable_terms 저장 실패");
+      }
+
+      // Sync normalized timetable (courses + meetings) if present in HTML.
+      const timetableParsed = parseEverytimeTimetableFromHtml(fetched.text, { pxPerHour });
+      let syncedCourses = 0;
+      let syncedMeetings = 0;
+      let timetableSyncError = null;
+
+      try {
+        await supabase.from("timetable_courses").delete().eq("term_id", termRow.id);
+
+        const coursesToInsert = (timetableParsed && Array.isArray(timetableParsed.courses) ? timetableParsed.courses : []).map((c) => ({
+          term_id: termRow.id,
+          course_name: c.course_name,
+          instructor_name: c.instructor_name || null,
+          location_text: c.location_text || null,
+          color_key: c.color_key || null,
+          source_course_key: null
+        }));
+
+        if (coursesToInsert.length) {
+          const { data: insertedCourses, error: courseInsertError } = await supabase
+            .from("timetable_courses")
+            .insert(coursesToInsert)
+            .select("id, course_name, instructor_name, location_text");
+          if (courseInsertError) {
+            throw new Error(courseInsertError.message || "courses insert 실패");
+          }
+
+          syncedCourses = insertedCourses ? insertedCourses.length : 0;
+
+          const idMap = new Map();
+          for (const row of insertedCourses || []) {
+            const key = `${row.course_name}||${row.instructor_name || ""}||${row.location_text || ""}`;
+            if (row && row.id) idMap.set(key, row.id);
+          }
+
+          const meetingInserts = [];
+          for (const c of timetableParsed.courses || []) {
+            const key = `${c.course_name}||${c.instructor_name || ""}||${c.location_text || ""}`;
+            const courseId = idMap.get(key);
+            if (!courseId) continue;
+            for (const m of c.meetings || []) {
+              meetingInserts.push({
+                course_id: courseId,
+                day_of_week: m.day_of_week,
+                start_minute: m.start_minute,
+                end_minute: m.end_minute
+              });
+            }
+          }
+
+          if (meetingInserts.length) {
+            const { error: meetingError } = await supabase.from("timetable_course_meetings").insert(meetingInserts);
+            if (meetingError) {
+              throw new Error(meetingError.message || "meetings insert 실패");
+            }
+            syncedMeetings = meetingInserts.length;
+          }
+        }
+      } catch (e) {
+        timetableSyncError = e && e.message ? String(e.message) : String(e);
+      }
+
+      let rawSaved = false;
+      let rawSaveError = null;
+      try {
+        const { error: rawError } = await supabase.from("timetable_import_raw").insert({
+          term_id: termRow.id,
+          source: "everytime",
+          source_url: fetched.url,
+          raw_html: fetched.text
+        });
+        if (rawError) {
+          rawSaveError = rawError.message || "raw 저장 실패";
+        } else {
+          rawSaved = true;
+        }
+      } catch (e) {
+        rawSaveError = e && e.message ? String(e.message) : String(e);
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        profileId: profileRow.id,
+        termId: termRow.id,
+        termLabel: safeTermLabel,
+        syncedCourses,
+        syncedMeetings,
+        timetableSyncError,
+        rawSaved,
+        rawSaveError
+      });
+      return;
+    } catch (err) {
+      const message = err && err.message ? String(err.message) : String(err);
+      const statusCode = message === "JSON 파싱 실패" ? 400 : 500;
+      sendJson(res, statusCode, {
+        ok: false,
+        message: message
+      });
+      return;
+    }
+  }
+
+  if (method === "POST" && pathname === "/api/team-members") {
+    try {
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
+        });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const name = body && body.name != null ? body.name : "";
+      const studentId = body && body.studentId != null ? body.studentId : "";
+
+      await addOrUpdateTeamMemberByPortalLoginId({ portalLoginId, name, studentId });
+      const members = await loadTeamMembersByPortalLoginId(portalLoginId);
+
+      sendJson(res, 200, { ok: true, members });
+      return;
+    } catch (err) {
+      const message = err && err.message ? String(err.message) : String(err);
+      const statusCode = message === "JSON 파싱 실패" ? 400 : 500;
+      sendJson(res, statusCode, {
+        ok: false,
+        message: message
+      });
+      return;
+    }
+  }
+
+  if (method === "DELETE" && pathname === "/api/team-members") {
+    try {
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
+        });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const studentId = body && body.studentId != null ? body.studentId : "";
+      await deleteTeamMemberByPortalLoginId({ portalLoginId, studentId });
+      const members = await loadTeamMembersByPortalLoginId(portalLoginId);
+
+      sendJson(res, 200, { ok: true, members });
+      return;
+    } catch (err) {
+      const message = err && err.message ? String(err.message) : String(err);
+      const statusCode = message === "JSON 파싱 실패" ? 400 : 500;
+      sendJson(res, statusCode, {
+        ok: false,
+        message: message
       });
       return;
     }

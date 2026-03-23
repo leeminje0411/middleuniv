@@ -317,9 +317,15 @@ async function readAllBtnLoginTexts(page) {
 function extractUserNameFromTexts(texts) {
   if (!Array.isArray(texts)) return null;
   for (const t of texts) {
-    const normalized = String(t || "").replace(/\s+/g, " ").trim();
-    const m = normalized.match(/^(\S+)\s*님\b/);
-    if (m && m[1] && m[1] !== "로그인") return m[1];
+    const normalized = String(t || "")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const m = normalized.match(/^(.+?)\s*님(?:\b|\s|$)/);
+    if (m && m[1]) {
+      const candidate = String(m[1]).trim();
+      if (candidate && candidate !== "로그인") return candidate;
+    }
   }
   return null;
 }
@@ -374,8 +380,15 @@ function explainUserNameExtraction(texts) {
   if (!Array.isArray(texts) || texts.length === 0) {
     return { ok: false, reason: "no .btn-login elements", sample: [] };
   }
-  const normalized = texts.map((t) => String(t || "").replace(/\s+/g, " ").trim()).filter((t) => t);
-  const hasNim = normalized.some((t) => /\S+\s*님\b/.test(t));
+  const normalized = texts
+    .map((t) =>
+      String(t || "")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter((t) => t);
+  const hasNim = normalized.some((t) => t.includes("님"));
   if (!hasNim) {
     return { ok: false, reason: "no candidate contains 님", sample: normalized.slice(0, 8) };
   }

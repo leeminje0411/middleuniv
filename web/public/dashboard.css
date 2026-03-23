@@ -97,6 +97,18 @@ body.modal-open {
   margin: 22px auto 48px;
 }
 
+.dashboard-two-col {
+  display: grid;
+  gap: 18px;
+}
+
+@media (min-width: 1100px) {
+  .dashboard-two-col {
+    grid-template-columns: minmax(0, 1fr) 420px;
+    align-items: start;
+  }
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -129,6 +141,7 @@ body.modal-open {
 .panel-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .run-button,
@@ -361,6 +374,309 @@ body.modal-open {
   background: rgba(11, 17, 29, 0.62);
 }
 
+.everytime-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 6000;
+}
+
+.everytime-modal.show {
+  display: block;
+}
+
+.everytime-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 17, 29, 0.62);
+}
+
+.everytime-sheet {
+  position: relative;
+  width: min(640px, calc(100% - 56px));
+  margin: 90px auto;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.everytime-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.everytime-title {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.everytime-sub {
+  margin-top: 6px;
+  color: var(--sub);
+  font-size: 13px;
+}
+
+.everytime-close {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.85);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.everytime-body {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.everytime-field {
+  width: 100%;
+}
+
+.everytime-logo-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 2px;
+}
+
+.everytime-logo {
+  height: 34px;
+  width: auto;
+  display: block;
+}
+
+.everytime-input {
+  height: 54px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.95);
+  font-weight: 900;
+  font-size: 14px;
+  outline: none;
+  box-shadow: 0 10px 26px rgba(17, 33, 58, 0.08);
+}
+
+.everytime-input:focus {
+  border-color: rgba(15, 78, 166, 0.55);
+  box-shadow: 0 0 0 4px rgba(15, 78, 166, 0.18), 0 10px 26px rgba(17, 33, 58, 0.08);
+}
+
+.everytime-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.everytime-error {
+  margin-top: 10px;
+  color: #b42318;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.everytime-terms {
+  display: grid;
+  gap: 10px;
+}
+
+.everytime-term {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.everytime-term input {
+  margin: 0;
+}
+
+.everytime-term-label {
+  font-weight: 900;
+  color: var(--text);
+}
+
+.everytime-term-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 78, 166, 0.22);
+  background: rgba(15, 78, 166, 0.10);
+  color: rgba(15, 78, 166, 0.95);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.everytime-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.everytime-debug {
+  margin: -2px 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.everytime-preview {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  overflow: hidden;
+}
+
+.everytime-scale {
+  padding: 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.everytime-scale-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.everytime-scale-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.everytime-scale-value {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 900;
+}
+
+.everytime-scale input[type="range"] {
+  width: 100%;
+}
+
+.everytime-scale-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.eta-tt-wrap {
+  width: 100%;
+}
+
+.eta-tt-head {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.eta-tt-cell {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: var(--text);
+}
+
+.eta-tt-cell.day {
+  border-left: 1px solid var(--line);
+}
+
+.eta-tt-body {
+  position: relative;
+  overflow: auto;
+}
+
+.eta-tt-times {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.78);
+  border-right: 1px solid var(--line);
+}
+
+.eta-tt-time {
+  position: absolute;
+  left: 10px;
+  transform: translateY(-10px);
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.eta-tt-grid {
+  position: relative;
+  min-width: 610px;
+}
+
+.eta-tt-col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.eta-tt-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.eta-tt-block {
+  position: absolute;
+  margin-left: 5px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 33, 58, 0.12);
+  padding: 10px 10px;
+  overflow: hidden;
+}
+
+.eta-tt-name {
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.82);
+  line-height: 1.2;
+}
+
+.eta-tt-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.55);
+  line-height: 1.2;
+}
+
 .reservation-sheet {
   position: relative;
   width: min(720px, calc(100% - 28px));
@@ -412,6 +728,7 @@ body.modal-open {
   display: grid;
   gap: 16px;
   overflow: auto;
+  padding-bottom: 96px;
 }
 
 .reservation-section {
@@ -495,6 +812,11 @@ body.modal-open {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  position: sticky;
+  bottom: 0;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .reservation-action {
@@ -544,6 +866,10 @@ body.modal-open {
   .reservation-sheet {
     margin: 18px auto;
     max-height: calc(100vh - 36px);
+  }
+
+  .everytime-sheet {
+    margin: 18px auto;
   }
 }
 
