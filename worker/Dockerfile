@@ -12,6 +12,9 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV="production"
 
+# Keep Playwright browsers in a path we can copy between stages.
+ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
+
 
 # Throw-away build stage to reduce size of final image
 FROM base AS build
@@ -24,6 +27,9 @@ RUN apt-get update -qq && \
 COPY package-lock.json package.json ./
 RUN npm ci
 
+# Install Chromium for Playwright during build (download once)
+RUN npx playwright install chromium
+
 # Copy application code
 COPY . .
 
@@ -33,6 +39,12 @@ FROM base
 
 # Copy built application
 COPY --from=build /app /app
+
+# Install OS deps required by Playwright Chromium (needs playwright package from /app)
+RUN npx playwright install-deps chromium
+
+# Copy Playwright browsers cache
+COPY --from=build /ms-playwright /ms-playwright
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 4000
