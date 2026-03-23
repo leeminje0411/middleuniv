@@ -654,6 +654,7 @@ ensureDir(LIVE_DIR);
 ensureDir(RUNTIME_DIR);
 
 let session = null;
+let warmSession = null;
 let jobState = null;
 let playwrightLock = Promise.resolve();
 
@@ -771,6 +772,15 @@ function getWorkerState() {
           lastActiveAt: session.lastActiveAt || null
         }
       : null
+    ,
+    warmSession: warmSession
+      ? {
+          hasBrowser: Boolean(warmSession.browser),
+          headless: typeof warmSession.headless === "boolean" ? warmSession.headless : null,
+          createdAt: warmSession.createdAt || null,
+          lastActiveAt: warmSession.lastActiveAt || null
+        }
+      : null
   };
 }
 
@@ -804,7 +814,7 @@ async function getOrCreateSession({ loginId, password, headless }) {
     : (process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true);
 
   if (session && session.loginId === normalizedId) {
-    const pageClosed = await session.page?.isClosed?.().catch?.(() => true);
+    const pageClosed = await isPlaywrightPageClosed(session.page);
     if (pageClosed || !session.page || !session.context || !session.browser) {
       pushJobLog("getOrCreateSession: existing session has closed page/context/browser -> recreate");
       await closeSession().catch(() => {});
@@ -822,6 +832,41 @@ async function getOrCreateSession({ loginId, password, headless }) {
   }
 
   if (session) {
+    return session;
+  }
+
+  if (warmSession) {
+    const warmPageClosed = await isPlaywrightPageClosed(warmSession.page);
+    if (warmPageClosed || !warmSession.page || !warmSession.context || !warmSession.browser) {
+      await closeWarmSession().catch(() => {});
+      warmSession = null;
+    }
+  }
+
+  if (warmSession) {
+    const desiredHeadlessForWarm = typeof headless === "boolean"
+      ? headless
+      : (process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true);
+
+    if (typeof warmSession.headless === "boolean" && warmSession.headless !== desiredHeadlessForWarm) {
+      await closeWarmSession().catch(() => {});
+      warmSession = null;
+    }
+  }
+
+  if (warmSession) {
+    session = {
+      browser: warmSession.browser,
+      context: warmSession.context,
+      page: warmSession.page,
+      loginId: normalizedId,
+      password,
+      headless: warmSession.headless,
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString()
+    };
+    warmSession = null;
+    pushJobLog(`getOrCreateSession: reused warm browser session`);
     return session;
   }
 
@@ -852,6 +897,56 @@ async function closeSession() {
   if (!s) return;
   await s.context?.close().catch(() => {});
   await s.browser?.close().catch(() => {});
+}
+
+async function closeWarmSession() {
+  const s = warmSession;
+  warmSession = null;
+  if (!s) return;
+  await s.context?.close().catch(() => {});
+  await s.browser?.close().catch(() => {});
+}
+
+async function warmupBrowserSession({ headless } = {}) {
+  const desiredHeadless = typeof headless === "boolean"
+    ? headless
+    : (process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true);
+
+  if (warmSession) {
+    const pageClosed = await isPlaywrightPageClosed(warmSession.page);
+    if (!pageClosed && warmSession.browser && warmSession.context && warmSession.page) {
+      warmSession.lastActiveAt = new Date().toISOString();
+      return warmSession;
+    }
+    await closeWarmSession().catch(() => {});
+    warmSession = null;
+  }
+
+  if (session) {
+    const pageClosed = await isPlaywrightPageClosed(session.page);
+    if (!pageClosed && session.browser && session.context && session.page) {
+      session.lastActiveAt = new Date().toISOString();
+      return session;
+    }
+  }
+
+  const slowMo = Number(process.env.BOOK_SLOWMO_MS) || 0;
+  const browser = await chromium.launch({ headless: desiredHeadless, slowMo });
+  const context = await browser.newContext({
+    viewport: desiredHeadless ? { width: 1440, height: 1200 } : DEFAULT_VIEWPORT
+  });
+  const page = await context.newPage();
+
+  warmSession = {
+    browser,
+    context,
+    page,
+    headless: desiredHeadless,
+    createdAt: new Date().toISOString(),
+    lastActiveAt: new Date().toISOString()
+  };
+
+  return warmSession;
 }
 
 async function ensureLoggedIn(page, loginId, password) {
@@ -950,6 +1045,17 @@ function serveFile(res, filePath) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function isPlaywrightPageClosed(page) {
+  try {
+    if (!page) return true;
+    const fn = page.isClosed;
+    if (typeof fn !== "function") return true;
+    return await fn.call(page);
+  } catch (e) {
+    return true;
+  }
 }
 
 function bookWaitStamp() {
@@ -1838,6 +1944,30 @@ const server = http.createServer(async (req, res) => {
 
   if (method === "GET" && pathname === "/api/state") {
     sendJson(res, 200, getWorkerState());
+    return;
+  }
+
+  if (method === "GET" && pathname === "/api/warmup") {
+    const startedAt = Date.now();
+    const scrapeHeadless = process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true;
+
+    withPlaywrightLock(async () => {
+      try {
+        const warmStartedAt = Date.now();
+        pushJobLog(`[worker] warmup start headless=${String(scrapeHeadless)}`);
+        const s = await warmupBrowserSession({ headless: scrapeHeadless });
+        pushJobLog(`[worker] warmup end (${Date.now() - warmStartedAt}ms) url=${s && s.page ? s.page.url() : "-"}`);
+      } catch (e) {
+        pushJobLog(`[worker] warmup failed: ${String(e && e.message ? e.message : e)}`);
+      }
+    });
+
+    sendJson(res, 200, {
+      ok: true,
+      queued: true,
+      headless: scrapeHeadless,
+      ms: Date.now() - startedAt
+    });
     return;
   }
 
