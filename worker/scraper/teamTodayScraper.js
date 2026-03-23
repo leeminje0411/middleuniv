@@ -99,7 +99,7 @@ async function loginSnapshot(page) {
 const BASE_URL = "https://library.cau.ac.kr";
 const LOGIN_URL = `${BASE_URL}/login?returnUrl=%2F&queryParamsHandling=merge`;
 const TEAM_URL = `${BASE_URL}/library-services/room/team-rooms?tabIndex=2`;
-
+//
 const DEFAULT_VIEWPORT = { width: 980, height: 720 };
 
 function nowStamp() {
