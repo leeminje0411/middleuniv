@@ -1,0 +1,18 @@
+name: Fly Keep Warm
+
+on:
+  schedule:
+    # GitHub Actions cron runs at minimum every 5 minutes.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping worker /api/state
+        run: |
+          set -euo pipefail
+          URL="https://cau-probe-runtime-long-wind-8074.fly.dev/api/state"
+          echo "Pinging: ${URL}"
+          curl -fsS --max-time 20 "${URL}" > /dev/null
