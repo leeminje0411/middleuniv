@@ -859,12 +859,23 @@ async function openRoomDetailFromList(page, roomIndex) {
   const card = page.locator(".ikc-card-rooms").nth(roomIndex);
   const reserveBtn = card.locator('button:has-text("예약")').first();
 
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {}),
+  await Promise.allSettled([
+    page.waitForURL((url) => String(url).includes("/library-services/room/team-room"), { timeout: 20000 }),
     reserveBtn.click()
   ]);
 
-  await page.waitForSelector(".ikc-room-info", { timeout: 15000 });
+  await page.waitForSelector(".ikc-room-info", { timeout: 25000 });
+}
+
+async function waitForRoomCardsRendered(page, timeoutMs) {
+  const timeout = Number.isFinite(Number(timeoutMs)) ? Number(timeoutMs) : 25000;
+  await page.waitForSelector("#reservableDate", { timeout }).catch(() => {});
+  await page
+    .waitForFunction(() => {
+      const cards = document.querySelectorAll(".ikc-card-rooms");
+      return cards && cards.length > 0;
+    }, { timeout })
+    .catch(() => {});
 }
 
 async function readSelectOptions(page, selector) {
