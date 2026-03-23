@@ -666,9 +666,12 @@ async function waitForTeamList(page) {
         await page.evaluate((u) => {
           location.href = u;
         }, TEAM_URL).catch(() => {});
-        await page
-          .waitForURL((u) => String(u).includes("/library-services/room/team-rooms"), { timeout: 15000 })
-          .catch(() => {});
+        await Promise.all([
+          page.waitForURL((url) => String(url).includes("/library-services/room/team-rooms"), {
+            timeout: 15000
+          }),
+          page.waitForLoadState("networkidle")
+        ]);
       },
       { timeoutMs: 16000, snapshot: snap }
     );
@@ -1185,10 +1188,26 @@ async function processRoomDetail(page, room, index, totalRooms) {
   try {
     const hopeDate = selectedDate && selectedDate.selectedValue ? String(selectedDate.selectedValue) : "";
     const listUrl = hopeDate ? `${TEAM_URL}&hopeDate=${encodeURIComponent(hopeDate)}` : TEAM_URL;
-    await detailPage.goto(listUrl, { waitUntil: "domcontentloaded" });
-    await detailPage.waitForSelector(".ikc-card-rooms", { timeout: 5000 });
-    
-    await openRoomDetailFromList(detailPage, index);
+    let opened = false;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await detailPage.goto(listUrl, { waitUntil: "networkidle", timeout: 30000 });
+        await waitForRoomCardsRendered(detailPage, 25000);
+
+        await openRoomDetailFromList(detailPage, index);
+        opened = true;
+        break;
+      } catch (e) {
+        debugLog("상세 진입 재시도:", index, room.name, `attempt=${attempt + 1}`, e && e.message ? e.message : String(e));
+        if (attempt === 0) {
+          await detailPage.reload({ waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+        }
+      }
+    }
+
+    if (!opened) {
+      throw new Error("상세 페이지 진입 실패(리스트 카드 렌더링/전환 타임아웃)");
+    }
     
     debugLog("상세페이지 진입 완료:", detailPage.url());
     const basic = await scrapeRoomDetailBasic(detailPage);
@@ -1221,7 +1240,7 @@ async function processRoomDetail(page, room, index, totalRooms) {
 
 // 최적화된 병렬 처리
 async function processAllRoomsOptimizedParallel(page, rooms) {
-  const MAX_CONCURRENT = 10; // 다시 10개로
+  const MAX_CONCURRENT = 2;
   const results = [];
   
   const startTime = Date.now();
