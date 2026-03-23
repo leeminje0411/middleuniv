@@ -186,12 +186,13 @@ export default function LoginPage() {
         throw new Error((j && j.message) || "로그인 요청 실패");
       }
 
+      await pollUntilLoginStep();
+
       setStatusText("대시보드로 이동 중...");
 
       sessionStorage.setItem("cau_login_id", safeId);
       sessionStorage.setItem("cau_login_password", safePassword);
       sessionStorage.setItem("cau_logged_in", "true");
-      sessionStorage.setItem("cau_run_triggered_at", String(Date.now()));
 
       try {
         console.log("[login] redirect to /dashboard");

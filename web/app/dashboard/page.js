@@ -806,39 +806,7 @@ export default function DashboardPage() {
       // ignore
     }
 
-    try {
-      const tsRaw = sessionStorage.getItem("cau_run_triggered_at");
-      const ts = tsRaw ? Number(tsRaw) : NaN;
-      if (Number.isFinite(ts) && Date.now() - ts < 120000) {
-        setStateData((prev) => {
-          if (prev && prev.status === "running") return prev;
-          return {
-            isRunning: true,
-            startedAt: new Date(ts).toISOString(),
-            finishedAt: null,
-            progress: 1,
-            step: "세션 준비 중...",
-            status: "running",
-            error: null,
-            pid: null,
-            logs: [],
-            data: prev && prev.data ? prev.data : null
-          };
-        });
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    fetchStateOnce()
-      .catch(() => {})
-      .finally(() => {
-        try {
-          sessionStorage.removeItem("cau_run_triggered_at");
-        } catch (e) {
-          // ignore
-        }
-      });
+    fetchStateOnce().catch(() => {});
     loadMembers().catch(() => {});
 
     pollingRef.current = setInterval(() => {
