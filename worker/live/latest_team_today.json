@@ -1,5 +1,5 @@
 {
-  "scrapedAt": "2026-03-23T10:53:35.008Z",
+  "scrapedAt": "2026-03-23T10:38:05.660Z",
   "sourceUrl": "https://library.cau.ac.kr/library-services/room/team-rooms?tabIndex=2",
   "selectedDateValue": "2026-03-23",
   "selectedDateLabel": "3월 23일",
@@ -41,14 +41,14 @@
           "endMinute": 1180
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:40",
           "end": "19:50",
           "startMinute": 1180,
           "endMinute": 1190
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:50",
           "end": "20:00",
           "startMinute": 1190,
@@ -353,11 +353,11 @@
         {
           "status": "이용불가",
           "start": "19:00",
-          "end": "20:00"
+          "end": "19:40"
         },
         {
           "status": "이용중",
-          "start": "20:00",
+          "start": "19:40",
           "end": "22:00"
         },
         {
@@ -396,7 +396,20 @@
         "desc": "팀플룸1",
         "attention": "-",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [],
+        "useSectionOptions": [
+          {
+            "value": "1",
+            "label": "학습"
+          },
+          {
+            "value": "2",
+            "label": "회의"
+          },
+          {
+            "value": "3",
+            "label": "수업"
+          }
+        ],
         "slots": [
           {
             "status": "이용불가",
@@ -427,14 +440,14 @@
             "endMinute": 1180
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:40",
             "end": "19:50",
             "startMinute": 1180,
             "endMinute": 1190
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:50",
             "end": "20:00",
             "startMinute": 1190,
@@ -739,11 +752,11 @@
           {
             "status": "이용불가",
             "start": "19:00",
-            "end": "20:00"
+            "end": "19:40"
           },
           {
             "status": "이용중",
-            "start": "20:00",
+            "start": "19:40",
             "end": "22:00"
           },
           {
@@ -841,14 +854,14 @@
           "endMinute": 1180
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:40",
           "end": "19:50",
           "startMinute": 1180,
           "endMinute": 1190
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:50",
           "end": "20:00",
           "startMinute": 1190,
@@ -1153,11 +1166,11 @@
         {
           "status": "이용불가",
           "start": "19:00",
-          "end": "20:00"
+          "end": "19:40"
         },
         {
           "status": "이용중",
-          "start": "20:00",
+          "start": "19:40",
           "end": "22:00"
         },
         {
@@ -1196,7 +1209,20 @@
         "desc": "팀플룸2",
         "attention": "-",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [],
+        "useSectionOptions": [
+          {
+            "value": "1",
+            "label": "학습"
+          },
+          {
+            "value": "2",
+            "label": "회의"
+          },
+          {
+            "value": "3",
+            "label": "수업"
+          }
+        ],
         "slots": [
           {
             "status": "이용불가",
@@ -1227,14 +1253,14 @@
             "endMinute": 1180
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:40",
             "end": "19:50",
             "startMinute": 1180,
             "endMinute": 1190
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:50",
             "end": "20:00",
             "startMinute": 1190,
@@ -1539,11 +1565,11 @@
           {
             "status": "이용불가",
             "start": "19:00",
-            "end": "20:00"
+            "end": "19:40"
           },
           {
             "status": "이용중",
-            "start": "20:00",
+            "start": "19:40",
             "end": "22:00"
           },
           {
@@ -1641,14 +1667,14 @@
           "endMinute": 1180
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:40",
           "end": "19:50",
           "startMinute": 1180,
           "endMinute": 1190
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:50",
           "end": "20:00",
           "startMinute": 1190,
@@ -1953,11 +1979,11 @@
         {
           "status": "이용불가",
           "start": "19:00",
-          "end": "20:00"
+          "end": "19:40"
         },
         {
           "status": "이용중",
-          "start": "20:00",
+          "start": "19:40",
           "end": "22:00"
         },
         {
@@ -2040,14 +2066,14 @@
             "endMinute": 1180
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:40",
             "end": "19:50",
             "startMinute": 1180,
             "endMinute": 1190
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:50",
             "end": "20:00",
             "startMinute": 1190,
@@ -2352,11 +2378,11 @@
           {
             "status": "이용불가",
             "start": "19:00",
-            "end": "20:00"
+            "end": "19:40"
           },
           {
             "status": "이용중",
-            "start": "20:00",
+            "start": "19:40",
             "end": "22:00"
           },
           {
@@ -2454,14 +2480,14 @@
           "endMinute": 1180
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:40",
           "end": "19:50",
           "startMinute": 1180,
           "endMinute": 1190
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:50",
           "end": "20:00",
           "startMinute": 1190,
@@ -2766,11 +2792,11 @@
         {
           "status": "이용불가",
           "start": "19:00",
-          "end": "20:00"
+          "end": "19:40"
         },
         {
           "status": "이용중",
-          "start": "20:00",
+          "start": "19:40",
           "end": "21:00"
         },
         {
@@ -2809,7 +2835,20 @@
         "desc": "팀플룸4",
         "attention": "-",
         "companionHint": "수용인원 5 ~ 9명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [],
+        "useSectionOptions": [
+          {
+            "value": "1",
+            "label": "학습"
+          },
+          {
+            "value": "2",
+            "label": "회의"
+          },
+          {
+            "value": "3",
+            "label": "수업"
+          }
+        ],
         "slots": [
           {
             "status": "이용불가",
@@ -2840,14 +2879,14 @@
             "endMinute": 1180
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:40",
             "end": "19:50",
             "startMinute": 1180,
             "endMinute": 1190
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:50",
             "end": "20:00",
             "startMinute": 1190,
@@ -3152,11 +3191,11 @@
           {
             "status": "이용불가",
             "start": "19:00",
-            "end": "20:00"
+            "end": "19:40"
           },
           {
             "status": "이용중",
-            "start": "20:00",
+            "start": "19:40",
             "end": "21:00"
           },
           {
@@ -3254,14 +3293,14 @@
           "endMinute": 1180
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:40",
           "end": "19:50",
           "startMinute": 1180,
           "endMinute": 1190
         },
         {
-          "status": "이용불가",
+          "status": "이용중",
           "start": "19:50",
           "end": "20:00",
           "startMinute": 1190,
@@ -3566,6 +3605,11 @@
         {
           "status": "이용불가",
           "start": "19:00",
+          "end": "19:40"
+        },
+        {
+          "status": "이용중",
+          "start": "19:40",
           "end": "20:00"
         },
         {
@@ -3604,7 +3648,20 @@
         "desc": "팀플룸5",
         "attention": "",
         "companionHint": "수용인원 3 ~ 7명 내에서만 예약할 수 있습니다.",
-        "useSectionOptions": [],
+        "useSectionOptions": [
+          {
+            "value": "1",
+            "label": "학습"
+          },
+          {
+            "value": "2",
+            "label": "회의"
+          },
+          {
+            "value": "3",
+            "label": "수업"
+          }
+        ],
         "slots": [
           {
             "status": "이용불가",
@@ -3635,14 +3692,14 @@
             "endMinute": 1180
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:40",
             "end": "19:50",
             "startMinute": 1180,
             "endMinute": 1190
           },
           {
-            "status": "이용불가",
+            "status": "이용중",
             "start": "19:50",
             "end": "20:00",
             "startMinute": 1190,
@@ -3947,6 +4004,11 @@
           {
             "status": "이용불가",
             "start": "19:00",
+            "end": "19:40"
+          },
+          {
+            "status": "이용중",
+            "start": "19:40",
             "end": "20:00"
           },
           {

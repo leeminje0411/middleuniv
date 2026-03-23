@@ -72,15 +72,6 @@ export default function LoginPage() {
     return !isRunning && loginId.trim() && loginPassword;
   }, [isRunning, loginId, loginPassword]);
 
-  const isLocalhost = useMemo(() => {
-    try {
-      if (typeof window === "undefined") return false;
-      return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    } catch (e) {
-      return false;
-    }
-  }, []);
-
   function readStoredCreds() {
     try {
       const id = (sessionStorage.getItem("cau_login_id") || localStorage.getItem("cau_login_id") || "").trim();
@@ -241,7 +232,6 @@ export default function LoginPage() {
 
         <form
           className="form-area"
-          style={{ display: "none" }}
           onSubmit={(e) => {
             e.preventDefault();
             if (canSubmit) {
@@ -264,23 +254,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {!isRunning ? (
-          <button
-            type="button"
-            className="login-button"
-            disabled={isRunning}
-            onClick={() => {
-              if (!isLocalhost) {
-                alert("테스트 로그인 버튼은 로컬에서만 사용할 수 있습니다.");
-                return;
-              }
-              runWithPromptedCreds();
-            }}
-          >
-            <span className="button-text">테스트 로그인</span>
-          </button>
-        ) : null}
       </div>
     </div>
   );
 }
+

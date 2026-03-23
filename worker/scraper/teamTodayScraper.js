@@ -1022,7 +1022,7 @@ async function runTeamTodayScraper(options) {
   const liveJsonPath = opts.liveJsonPath || path.join(outDir, "latest_team_today.json");
   const finalJsonPath = opts.finalJsonPath || path.join(outDir, "team_today_raw.json");
   const finalMdPath = opts.finalMdPath || path.join(outDir, "team_today_summary.md");
-  const headless = typeof opts.headless === "boolean" ? opts.headless : true;
+  const headless = true;
   const credentials = opts.credentials || (await collectCredentials());
   const injectedPage = opts.page || null;
   const keepOpen = Boolean(opts.keepOpen);

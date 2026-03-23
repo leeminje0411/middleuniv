@@ -42,13 +42,37 @@ export default function EtaTestPage() {
       return;
     }
     try {
-      console.log("Mapping term:", termUrl);
-      setDebugLog(`Mapping term: ${termUrl}`);
+      console.log("Previewing term:", termUrl);
+      setDebugLog(`Previewing term: ${termUrl}`);
+
+      const previewResp = await fetch("/api/everytime/preview-term", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-portal-login-id": "dummy-id"
+        },
+        body: JSON.stringify({ termUrl, pxPerHour })
+      });
+      const previewJson = await previewResp.json().catch(() => null);
+      if (!previewResp.ok || !previewJson || !previewJson.ok) {
+        throw new Error((previewJson && (previewJson.message || previewJson.error)) || "preview-term 실패");
+      }
+
+      const termLabel =
+        (parseResult && Array.isArray(parseResult.terms)
+          ? parseResult.terms.find((t) => t && t.url === termUrl)
+          : null
+        )?.label || previewJson.termLabel;
+
       const requestPayload = {
-        termLabel: parseResult.terms.find((term) => term.url === termUrl)?.label,
-        courses: parseResult.courses,
+        termLabel,
+        termUrl,
+        courses: previewJson.courses
       };
-      console.log("Request Payload:", requestPayload);
+
+      console.log("Map Request Payload:", requestPayload);
+      setDebugLog(`Mapping term (DB): ${termLabel}`);
+
       const response = await fetch("/api/everytime/map-term", {
         method: "POST",
         headers: { 
@@ -65,10 +89,17 @@ export default function EtaTestPage() {
         return;
       }
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
+      if (!data || !data.ok) {
+        throw new Error((data && (data.message || data.error)) || "map-term 실패");
+      }
+
       console.log("Mapped Courses:", data.mappedCourses);
       setDebugLog(`Mapped Courses: ${JSON.stringify(data.mappedCourses, null, 2)}`);
-      setPreviewData({ ...previewData, courses: data.mappedCourses });
+      setPreviewData({
+        termLabel: data.term && data.term.term_label ? data.term.term_label : termLabel,
+        courses: data.mappedCourses
+      });
     } catch (error) {
       console.error("Error mapping term:", error);
       setDebugLog(`Error mapping term: ${error.message}`);
@@ -159,7 +190,7 @@ export default function EtaTestPage() {
               <div key={index} className="course-block">
                 <h3>{course.course_name}</h3>
                 <p>{course.instructor_name}</p>
-                {course.meetings.map((meeting, idx) => (
+                {(course.mapped ? (course.matched_meetings || []) : (course.meetings || [])).map((meeting, idx) => (
                   <div
                     key={idx}
                     className="meeting-block"
@@ -176,7 +207,7 @@ export default function EtaTestPage() {
               </div>
             ))}
           </div>
-          <button onClick={syncEverytimeSelectedTerm}>저장</button>
+          <button disabled>저장(준비중)</button>
         </div>
       )}
       <div>

@@ -263,6 +263,21 @@ function parseEverytimeTimetableFromHtml(html, { pxPerHour } = {}) {
   const tableHtml = tableMatch ? tableMatch[0] : "";
   const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
 
+  // Determine the baseline start hour from tablehead (e.g. 9, 10, 11...) so top:0 aligns with real time.
+  let baseStartMinute = 0;
+  try {
+    const headMatch = text.match(/<table\s+class=["']tablehead["'][\s\S]*?<\/table>/i);
+    const headHtml = headMatch ? headMatch[0] : "";
+    const hourMatches = Array.from(headHtml.matchAll(/<b[^>]*>\s*(\d{1,2})\s*<\/b>/gi)).map((m) => Number(m[1]));
+    const hours = hourMatches.filter((h) => Number.isFinite(h) && h >= 0 && h <= 23);
+    if (hours.length) {
+      const minHour = Math.min(...hours);
+      baseStartMinute = Math.max(0, Math.min(23 * 60, minHour * 60));
+    }
+  } catch (e) {
+    baseStartMinute = 0;
+  }
+
   const days = [];
   let tdIdx = 0;
   let td;
@@ -293,8 +308,8 @@ function parseEverytimeTimetableFromHtml(html, { pxPerHour } = {}) {
       const heightPx = getStylePx(styleText, "height");
       if (topPx == null || heightPx == null) continue;
 
-      const startMinute = Math.max(0, Math.min(1439, Math.round(topPx / pxPerMinute)));
-      const endMinute = Math.max(1, Math.min(1440, Math.round((topPx + heightPx) / pxPerMinute)));
+      const startMinute = Math.max(0, Math.min(1439, baseStartMinute + Math.round(topPx / pxPerMinute)));
+      const endMinute = Math.max(1, Math.min(1440, baseStartMinute + Math.round((topPx + heightPx) / pxPerMinute)));
       if (endMinute <= startMinute) continue;
 
       const nameMatch = inner.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
@@ -335,9 +350,67 @@ function parseEverytimeTimetableFromHtml(html, { pxPerHour } = {}) {
     debug: {
       subjectExists: true,
       pxPerHour: usedPxPerHour,
+      baseStartMinute,
       dayCount: days.length
     }
   };
+}
+
+function normalizeTextLoose(input) {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[\-_/().,~'"`·:;!?\[\]{}<>|@#$%^&*+=\\]/g, "")
+    .trim();
+}
+
+function parseAcademicTermLabel(termLabel) {
+  const label = String(termLabel || "").replace(/\s+/g, " ").trim();
+  const yearMatch = label.match(/(19\d{2}|20\d{2})/);
+  const year = yearMatch ? Number(yearMatch[1]) : null;
+
+  let termType = null;
+  if (/겨울|winter/i.test(label)) termType = "winter";
+  else if (/여름|summer/i.test(label)) termType = "summer";
+  else if (/1\s*학기|\b1st\b/i.test(label)) termType = "1";
+  else if (/2\s*학기|\b2nd\b/i.test(label)) termType = "2";
+  else if (/학기/.test(label)) termType = "unknown";
+
+  return {
+    year,
+    term_type: termType,
+    term_label: label || null,
+    campus: null
+  };
+}
+
+function meetingOverlapScore(a, b) {
+  if (!a || !b) return 0;
+  if (a.day_of_week !== b.day_of_week) return 0;
+  const s = Math.max(a.start_minute, b.start_minute);
+  const e = Math.min(a.end_minute, b.end_minute);
+  const overlap = Math.max(0, e - s);
+  if (overlap <= 0) return 0;
+  const lenA = Math.max(1, a.end_minute - a.start_minute);
+  const lenB = Math.max(1, b.end_minute - b.start_minute);
+  const denom = Math.max(lenA, lenB);
+  return overlap / denom;
+}
+
+function bestMeetingOverlapScore(sourceMeetings, catalogMeetings) {
+  const src = Array.isArray(sourceMeetings) ? sourceMeetings : [];
+  const cat = Array.isArray(catalogMeetings) ? catalogMeetings : [];
+  if (!src.length || !cat.length) return 0;
+
+  let total = 0;
+  for (const sm of src) {
+    let best = 0;
+    for (const cm of cat) {
+      best = Math.max(best, meetingOverlapScore(sm, cm));
+    }
+    total += best;
+  }
+  return total / src.length;
 }
 
 async function fetchEverytimeHtmlWithFallback(targetUrl) {
@@ -726,7 +799,9 @@ async function getOrCreateSession({ loginId, password, headless }) {
     throw new Error("아이디와 비밀번호가 필요합니다.");
   }
 
-  const desiredHeadless = typeof headless === "boolean" ? headless : process.env.BOOK_HEADLESS === "true";
+  const desiredHeadless = typeof headless === "boolean"
+    ? headless
+    : (process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true);
 
   if (session && session.loginId === normalizedId) {
     const pageClosed = await session.page?.isClosed?.().catch?.(() => true);
@@ -738,7 +813,7 @@ async function getOrCreateSession({ loginId, password, headless }) {
   }
 
   if (session && session.loginId === normalizedId) {
-    if (typeof session.headless === "boolean" && session.headless !== desiredHeadless) {
+    if (typeof session.headless === true) {
       await closeSession().catch(() => {});
       session = null;
     } else {
@@ -1216,7 +1291,7 @@ async function performBooking({ id, password, roomIndex, roomId, dateValue, begi
   const TEAM_URL = `${BASE_URL}/library-services/room/team-rooms?tabIndex=2`;
 
   const usingInjectedPage = Boolean(reusePage);
-  const headless = process.env.BOOK_HEADLESS === "true";
+  const headless = process.env.BOOK_BOOK_HEADLESS ? process.env.BOOK_BOOK_HEADLESS === "true" : true;
   const slowMo = Number(process.env.BOOK_SLOWMO_MS) || 0;
   const browser = usingInjectedPage ? null : await chromium.launch({ headless, slowMo });
   const context = usingInjectedPage ? null : await browser.newContext({ viewport: { width: 1440, height: 1200 } });
@@ -1794,6 +1869,203 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (method === "POST" && pathname === "/api/everytime/map-term") {
+    try {
+      const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
+      if (!portalLoginId) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "x-portal-login-id 헤더가 필요합니다."
+        });
+        return;
+      }
+
+      const supabase = getSupabaseClientIfAvailable();
+      if (!supabase) {
+        sendJson(res, 400, {
+          ok: false,
+          message: "Supabase 설정이 필요합니다. (.env의 SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)"
+        });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const termLabel = body && body.termLabel != null ? String(body.termLabel) : "";
+      const termUrl = body && body.termUrl != null ? normalizeEverytimeUrl(body.termUrl) : "";
+      const courses = body && Array.isArray(body.courses) ? body.courses : [];
+
+      if (!termLabel.trim()) {
+        sendJson(res, 400, { ok: false, message: "termLabel이 필요합니다." });
+        return;
+      }
+      if (!courses.length) {
+        sendJson(res, 400, { ok: false, message: "courses가 비어있습니다. preview-term 결과(courses)를 그대로 전달하세요." });
+        return;
+      }
+
+      const parsedTerm = parseAcademicTermLabel(termLabel);
+      const year = parsedTerm.year;
+      const termType = parsedTerm.term_type || "unknown";
+      const campus = null;
+      if (!Number.isFinite(year) || !year) {
+        sendJson(res, 400, { ok: false, message: `termLabel에서 year를 추출할 수 없습니다: ${termLabel}` });
+        return;
+      }
+
+      // 1) academic_terms: treat campus NULL/'' as same key (unique idx uses coalesce)
+      const { data: existingTerms, error: existingErr } = await supabase
+        .from("academic_terms")
+        .select("id, year, term_type, term_label, campus")
+        .eq("year", year)
+        .eq("term_type", termType)
+        .or("campus.is.null,campus.eq.")
+        .limit(1);
+      if (existingErr) {
+        throw new Error(existingErr.message || "academic_terms 조회 실패");
+      }
+
+      let termRow = existingTerms && existingTerms[0] ? existingTerms[0] : null;
+
+      if (!termRow) {
+        const { data: inserted, error: insertErr } = await supabase
+          .from("academic_terms")
+          .insert({
+            year,
+            term_type: termType,
+            term_label: String(parsedTerm.term_label || termLabel).trim(),
+            campus
+          })
+          .select("id, year, term_type, term_label, campus")
+          .single();
+
+        if (insertErr || !inserted || !inserted.id) {
+          throw new Error(insertErr && insertErr.message ? insertErr.message : "academic_terms insert 실패");
+        }
+
+        termRow = inserted;
+      }
+
+      // 2) course_catalog(+meetings) load for this term
+      const { data: catalogRows, error: catalogErr } = await supabase
+        .from("course_catalog")
+        .select(
+          "id, course_code, section, course_name, professor_name, professor_name_normalized, course_name_normalized, building, room, course_catalog_meetings(day_of_week,start_minute,end_minute)"
+        )
+        .eq("term_id", termRow.id);
+
+      if (catalogErr) {
+        throw new Error(catalogErr.message || "course_catalog 조회 실패");
+      }
+
+      const catalog = Array.isArray(catalogRows) ? catalogRows : [];
+
+      // 3) match
+      const mappedCourses = [];
+      const mappingInserts = [];
+
+      for (const c of courses) {
+        const srcName = c && c.course_name != null ? String(c.course_name) : "";
+        const srcProf = c && c.instructor_name != null ? String(c.instructor_name) : "";
+        const srcLoc = c && c.location_text != null ? String(c.location_text) : "";
+        const srcMeetings = c && Array.isArray(c.meetings) ? c.meetings : [];
+
+        const normName = normalizeTextLoose(srcName);
+        const normProf = normalizeTextLoose(srcProf);
+
+        let best = null;
+        for (const row of catalog) {
+          const catNameRaw = row && row.course_name != null ? String(row.course_name) : "";
+          const catProfRaw = row && row.professor_name != null ? String(row.professor_name) : "";
+
+          const catName = normalizeTextLoose(row && row.course_name_normalized ? row.course_name_normalized : catNameRaw);
+          const catProf = normalizeTextLoose(row && row.professor_name_normalized ? row.professor_name_normalized : catProfRaw);
+
+          let nameScore = 0;
+          if (normName && catName && normName === catName) nameScore = 1;
+          else if (normName && catName && (catName.includes(normName) || normName.includes(catName))) nameScore = 0.65;
+
+          let profScore = 0;
+          if (normProf && catProf && normProf === catProf) profScore = 1;
+          else if (normProf && catProf && (catProf.includes(normProf) || normProf.includes(catProf))) profScore = 0.6;
+
+          const catMeetings = row && Array.isArray(row.course_catalog_meetings) ? row.course_catalog_meetings : [];
+          const overlap = bestMeetingOverlapScore(srcMeetings, catMeetings);
+
+          const score = nameScore * 0.6 + profScore * 0.2 + overlap * 0.2;
+          if (!best || score > best.score) {
+            best = {
+              score,
+              row,
+              nameScore,
+              profScore,
+              overlap
+            };
+          }
+        }
+
+        const matched = Boolean(best && best.row && best.score >= 0.62);
+        const matchedId = matched ? best.row.id : null;
+
+        mappedCourses.push({
+          course_name: srcName,
+          instructor_name: srcProf || null,
+          location_text: srcLoc || null,
+          meetings: srcMeetings,
+          mapped: matched,
+          match_score: best ? best.score : 0,
+          matched_course_catalog_id: matchedId,
+          matched_course_name: matched ? String(best.row.course_name || "") : null,
+          matched_professor_name: matched ? (best.row.professor_name != null ? String(best.row.professor_name) : null) : null,
+          matched_building: matched ? (best.row.building != null ? String(best.row.building) : null) : null,
+          matched_room: matched ? (best.row.room != null ? String(best.row.room) : null) : null,
+          matched_meetings: matched && Array.isArray(best.row.course_catalog_meetings) ? best.row.course_catalog_meetings : []
+        });
+
+        mappingInserts.push({
+          term_id: termRow.id,
+          course_catalog_id: matchedId,
+          source: "everytime",
+          source_course_code: null,
+          source_section: null,
+          source_course_name: srcName || null,
+          source_professor_name: srcProf || null,
+          source_days: srcMeetings && srcMeetings.length ? JSON.stringify(srcMeetings.map((m) => m.day_of_week)) : null,
+          source_building: null,
+          source_room: null,
+          match_score: best ? best.score : null
+        });
+      }
+
+      // 4) persist mapping batch
+      try {
+        await supabase.from("everytime_course_mapping").delete().eq("term_id", termRow.id).eq("source", "everytime");
+      } catch (e) {
+        // ignore
+      }
+
+      const { error: mapInsertErr } = await supabase.from("everytime_course_mapping").insert(mappingInserts);
+      if (mapInsertErr) {
+        throw new Error(mapInsertErr.message || "everytime_course_mapping insert 실패");
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        term: termRow,
+        sourceTermUrl: termUrl || null,
+        mappedCourses
+      });
+      return;
+    } catch (err) {
+      const message = err && err.message ? String(err.message) : String(err);
+      const statusCode = message === "JSON 파싱 실패" ? 400 : 500;
+      sendJson(res, statusCode, {
+        ok: false,
+        message
+      });
+      return;
+    }
+  }
+
   if (method === "POST" && pathname === "/api/everytime/preview-term") {
     try {
       const portalLoginId = String(req.headers["x-portal-login-id"] || "").trim();
@@ -2177,7 +2449,7 @@ const server = http.createServer(async (req, res) => {
           `request ${JSON.stringify({ roomIndex: roomIndex ?? null, roomId: roomId ?? null, dateValue, beginTime, endTime })}`
         );
 
-        const bookHeadless = process.env.BOOK_BOOK_HEADLESS === "true";
+        const bookHeadless = process.env.BOOK_BOOK_HEADLESS ? process.env.BOOK_BOOK_HEADLESS === "true" : true;
         const s = await getOrCreateSession({ loginId: id, password, headless: bookHeadless });
         pushBookingLog(`session headless=${Boolean(s && s.headless)} currentUrl=${s && s.page ? s.page.url() : "(no page)"}`);
         await ensureLoggedIn(s.page, s.loginId, s.password);
@@ -2325,7 +2597,7 @@ const server = http.createServer(async (req, res) => {
           const runStartedAt = Date.now();
           pushJobLog("[worker] 세션 준비 중...");
 
-          const scrapeHeadless = process.env.BOOK_HEADLESS === "true";
+          const scrapeHeadless = process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true;
 
           const sessionStartedAt = Date.now();
           pushJobLog(`[worker] getOrCreateSession start headless=${String(scrapeHeadless)}`);
@@ -2359,7 +2631,7 @@ const server = http.createServer(async (req, res) => {
             liveJsonPath,
             finalJsonPath,
             finalMdPath,
-            headless: process.env.BOOK_HEADLESS === "true",
+            headless: process.env.BOOK_HEADLESS ? process.env.BOOK_HEADLESS === "true" : true,
             credentials: { loginId: s.loginId, password: s.password },
             targetDateValue: dateValue,
             initialUserName: extractedUserName,
