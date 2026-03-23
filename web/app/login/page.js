@@ -191,6 +191,7 @@ export default function LoginPage() {
       sessionStorage.setItem("cau_login_id", safeId);
       sessionStorage.setItem("cau_login_password", safePassword);
       sessionStorage.setItem("cau_logged_in", "true");
+      sessionStorage.setItem("cau_run_triggered_at", String(Date.now()));
 
       try {
         console.log("[login] redirect to /dashboard");
